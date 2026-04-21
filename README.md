@@ -1,6 +1,7 @@
 # Stereo Dubbing Pro - V2
 
 An AI-powered stereo audio dubbing tool that transcribes, translates, and synthesizes voiceovers with independent channel control.
+
 This is just a test project. It was created as a sample.
 
 ## 🚀 Features

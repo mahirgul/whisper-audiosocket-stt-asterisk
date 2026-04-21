@@ -18,7 +18,7 @@ An AI-powered stereo audio dubbing tool that transcribes, translates, and synthe
 
 1. **Clone the repository:**
    ```bash
-   git clone <your-repo-url>
+   git clone Stereo-Dubbing-Pro-V2
    cd stereo-dubbing-pro-v2
    ```
 

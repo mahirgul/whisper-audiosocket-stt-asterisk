@@ -80,6 +80,18 @@ curl -X POST "http://localhost:8000/api/v1/dub-text" \
 ## ⚖ License
 
 MIT
+Screenshots
+
+<img width="1113" height="626" alt="image" src="https://github.com/user-attachments/assets/f172bf71-4550-4174-b985-24d7c84f9874" />
+
+------------------------------------------------------------
+
+<img width="1442" height="618" alt="image" src="https://github.com/user-attachments/assets/c68d317a-06ff-42c0-b347-a1bd3c2da2dd" />
+
+------------------------------------------------------------
+
+<img width="1417" height="927" alt="image" src="https://github.com/user-attachments/assets/c3dc1fc9-beb1-42ed-aed6-a3f3a760d577" />
+
 
 ---
 *Powered by [mhrgl.com](https://mhrgl.com)*

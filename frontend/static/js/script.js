@@ -81,20 +81,38 @@ function setChannel(mode) {
 function initWavesurfer(url) {
     setupAudioEngine();
     if (ws) ws.destroy();
+    
+    // Reset audio element
+    audioEl.pause();
     audioEl.src = url;
     audioEl.load(); 
-    ws = WaveSurfer.create({
-        container: '#waveform', media: audioEl, waveColor: '#3b82f6',
-        progressColor: '#60a5fa', height: 80, splitChannels: true, normalize: true
-    });
-    document.getElementById('playPause').onclick = () => {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        ws.playPause();
-    };
-    document.getElementById('btnLeft').onclick = () => setChannel('L');
-    document.getElementById('btnRight').onclick = () => setChannel('R');
-    document.getElementById('btnBoth').onclick = () => setChannel('Both');
-    setChannel('Both');
+
+    // Small timeout to ensure the container is visible and has dimensions
+    setTimeout(() => {
+        ws = WaveSurfer.create({
+            container: '#waveform',
+            url: url,
+            media: audioEl,
+            waveColor: '#3b82f6',
+            progressColor: '#60a5fa',
+            height: 80,
+            splitChannels: true,
+            normalize: true
+        });
+
+        ws.on('ready', () => {
+            console.log('WaveSurfer ready');
+        });
+
+        document.getElementById('playPause').onclick = () => {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            ws.playPause();
+        };
+        document.getElementById('btnLeft').onclick = () => setChannel('L');
+        document.getElementById('btnRight').onclick = () => setChannel('R');
+        document.getElementById('btnBoth').onclick = () => setChannel('Both');
+        setChannel('Both');
+    }, 50);
 }
 
 async function loadHistory(page = 1) {

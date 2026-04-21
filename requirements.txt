@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+python-multipart
+pydub
+openai-whisper
+torch
+torchaudio
+jinja2
+deep-translator
+edge-tts
+numpy
+psutil

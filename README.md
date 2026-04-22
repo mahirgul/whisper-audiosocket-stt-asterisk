@@ -1,110 +1,230 @@
 # Stereo Dubbing Pro - V2
 
-An AI-powered stereo audio dubbing tool that transcribes, translates, and synthesizes voiceovers with independent channel control.
+An AI-powered stereo audio dubbing tool that transcribes, translates, and synthesizes voiceovers with independent channel control. Now with real-time **Asterisk AudioSocket** integration.
 
-This is just a test project. It was created as a sample.
+This is just a test project. It was created as a sample project for testing purposes.
 
 ## 🚀 Features
 
 - **Stereo Dubbing:** Process Left and Right channels independently or as a unified timeline.
 - **Text-to-Dub:** Generate dubbed stereo audio directly from text input with auto-translation.
-- **Dynamic AI Voices:** Access dozens of high-quality "Neural" voices for every supported language, with gender and style variations.
-- **Multiple AI Models:** Choice between Whisper `Small`, `Medium`, and `Large-v3` models for local transcription.
-- **Asterisk Compatibility:** One-click export for Asterisk-compatible audio (8000Hz, Mono, 16-bit PCM WAV).
+- **Dynamic AI Voices:** Access dozens of high-quality Neural voices for every supported language, with gender and style variations.
+- **Multiple AI Models:** Choose between Whisper `Small`, `Medium`, and `Large-v3` models for local transcription.
+- **Asterisk Compatibility:** One-click export for Asterisk-compatible audio (8000 Hz, Mono, 16-bit PCM WAV).
+- **AudioSocket Listener:** Real-time TCP server that accepts Asterisk AudioSocket connections, transcribes, translates, and dubs incoming audio on the fly — with multi-connection support.
+- **REST Delivery:** Optionally POST dubbed audio to an external REST endpoint after each voice segment.
 - **History & Bulk Management:** Multi-select to delete past recordings or download full bundles (SRT + Audio).
 - **Interactive Player:** Multi-channel waveform player with L/R/Stereo switching.
 - **REST API:** Ready for external integration with one-shot endpoints.
 - **Smart Launcher:** Automatically cleans up port conflicts and manages local AI models.
 
+---
+
 ## 🛠 Installation
 
-2. **Test Environmet:**
-   - Windows 11
-   - Windows Terminal App
-   - Powershell 7.6.1
-   - Python 3.14
-   
-2. **Clone the repository:**
-   ```bash
-   git clone Stereo-Dubbing-Pro-V2
-   cd stereo-dubbing-pro-v2
-   ```
-      
-3. **Setup Virtual Environment:**
-   (with Powershell)
-   ```bash
-   winget install Python.Python.3.14
-   winget install ffmpeg
-   
-   python -m venv venv
-   .\venv\Scripts\Activate.ps1
-   pip install -r requirements.txt
-   pip install audioop-lts
-   ```
+### Test Environment
+- Windows 11
+- Windows Terminal
+- PowerShell 7.6.1
+- Python 3.14
 
-4. **Install FFmpeg:**
-   This project requires FFmpeg. Ensure it's installed and added to your system's PATH.
+### Quick Setup (Recommended)
+
+Run `install.bat` — it will automatically:
+1. Install Python 3.14 via `winget` (if missing)
+2. Install FFmpeg via `winget` (if missing)
+3. Create a Python virtual environment (`venv/`)
+4. Install all dependencies from `requirements.txt` + `audioop-lts`
+5. Create `models/whisper/` and `outputs/` directories
+
+### Manual Setup
+
+```bash
+winget install Python.Python.3.14
+winget install ffmpeg
+
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+pip install audioop-lts
+```
+
+---
 
 ## 💻 Usage
 
-### Using the Launcher (Windows)
+### Starting the Application
+
 Run `run.bat`. The launcher will:
-- Automatically **terminate any lingering processes** on port 8000.
-- Allow you to select your preferred AI model.
-- Check and **automatically download** models to the local `models/` folder if missing.
-- Start the server and **automatically open** the web interface in your default browser.
+- Terminate any lingering process on port 8000
+- Let you select a Whisper AI model (Small / Medium / Large)
+- Download the model automatically if not cached locally
+- Start the backend server and open the web UI in your browser
 
 ### Manual Start
+
 ```bash
 python backend/web.py --model medium
 ```
+
 Access the UI at `http://localhost:8000`.
 
-## 🔌 REST API for Integration
+---
+
+## 📡 AudioSocket Integration
+
+Stereo Dubbing Pro can act as a real-time AudioSocket server for Asterisk.
+
+### How It Works
+
+1. Asterisk dials an extension that uses `AudioSocket()` pointing to this server
+2. The server receives raw PCM audio from the call
+3. Voice Activity Detection (VAD) detects phrase boundaries (1.5 s silence = end of segment)
+4. Each segment is transcribed (Whisper) → translated → dubbed (edge-tts)
+5. All artifacts are saved to `audiosocket/{uuid}/`
+6. Optionally, the dubbed MP3 is POST-ed to a configured REST endpoint
+
+### Configuration — `audiosocket.json`
+
+```json
+{
+  "port": 9092,
+  "target_lang": "en",
+  "voice_type": "M",
+  "input_sample_rate": 8000,
+  "input_channels": 1,
+  "input_sample_width": 2,
+  "vad_silence_threshold_ms": 1500,
+  "vad_min_chunk_ms": 1000,
+  "delivery": {
+    "enabled": false,
+    "url": "http://your-server/api/receive-audio",
+    "method": "POST",
+    "field_name": "audio",
+    "extra_fields": {
+      "session_id": "{uuid}",
+      "lang": "{target_lang}"
+    },
+    "timeout_s": 10
+  }
+}
+```
+
+The configuration can also be edited live from the **AudioSocket Monitor** page (`/audiosocket.html`). Changes take effect immediately without restarting the application.
+
+### Asterisk Dialplan Example
+
+```
+exten => 1234,1,Answer()
+exten => 1234,2,AudioSocket(127.0.0.1:9092)
+exten => 1234,3,Hangup()
+```
+
+### Output Structure
+
+```
+audiosocket/
+  {asterisk-uuid}/
+    session.json          — session metadata, config snapshot
+    chunk_001.wav         — raw PCM chunk
+    chunk_001_orig.srt    — Whisper transcript
+    chunk_001_tran.srt    — translated SRT
+    chunk_001_dub.mp3     — TTS dubbed audio
+    chunk_002.wav
+    ...
+```
+
+### Monitor Page
+
+Open `/audiosocket.html` to:
+- View and edit `audiosocket.json` in-browser
+- Watch live connections and event logs in real time (Server-Sent Events)
+- Browse and play back past session recordings chunk by chunk
+- Delete individual sessions
+
+---
+
+## 🔌 REST API
 
 ### Documentation & Testing
-- **Swagger UI:** `http://localhost:8000/docs` - Interactive testing environment.
-- **ReDoc:** `http://localhost:8000/redoc` - Technical documentation.
+- **Swagger UI:** `http://localhost:8000/docs`
+- **ReDoc:** `http://localhost:8000/redoc`
 
-### One-Shot Dubbing Endpoint
-**Endpoint:** `POST /api/v1/dub-text`
-- `text`: String (Required)
-- `target_lang`: String (e.g., "tr", "en", "de")
-- `sync_mode`: "independent" | "original" | "unified"
-- `voice_type`: Voice ShortName or "M"/"F"
-- `asterisk`: Boolean (Include 8Khz WAV)
+### Dubbing Endpoints
 
-**Example cURL:**
+| Method | Route | Description |
+|--------|-------|-------------|
+| POST | `/transcribe` | Upload audio file → get transcription + translation |
+| POST | `/process-text` | Submit text → translate |
+| POST | `/synthesize/{job_id}` | Generate stereo dubbed audio |
+| POST | `/api/v1/dub-text` | One-shot: text → dubbed audio |
+| GET | `/download/{filename}` | Download full bundle (MP3 + SRTs + WAV) |
+| GET | `/history` | Paginated dubbing history |
+| DELETE | `/delete/{filename}` | Delete a recording |
+| DELETE | `/delete-multiple` | Bulk delete |
+
+### AudioSocket Endpoints
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/audiosocket/status` | Server status + active connection count |
+| GET | `/audiosocket/config` | Read `audiosocket.json` |
+| POST | `/audiosocket/config` | Save config + hot-reload TCP server |
+| GET | `/audiosocket/sessions` | Paginated session list |
+| GET | `/audiosocket/sessions/{uuid}` | Session detail with chunk list |
+| DELETE | `/audiosocket/sessions/{uuid}` | Delete session folder |
+| GET | `/audiosocket/stream` | SSE live event stream |
+
+### One-Shot Dub API Example
+
 ```bash
 curl -X POST "http://localhost:8000/api/v1/dub-text" \
      -F "text=Hello world" \
      -F "target_lang=tr"
 ```
 
+---
+
 ## 📂 Project Structure
 
-- `backend/`: FastAPI server and audio processing logic.
-- `frontend/`: Web interface (HTML, CSS, JS).
-- `models/`: Local storage for Whisper AI models.
-- `outputs/`: Generated audio, metadata, and SRT files.
-- `static/`: External CSS and JS assets for a clean code structure.
-- `download_models.py`: Helper script to pre-download all model variations.
+```
+Stereo-Dubbing-Pro-V2/
+├── backend/
+│   ├── web.py                    — FastAPI server + all routes
+│   ├── processor.py              — Whisper transcription, TTS, audio processing
+│   ├── audiosocket_server.py     — Async TCP AudioSocket listener
+│   └── audiosocket_processor.py — PCM→WAV, transcribe, translate, dub, REST delivery
+├── frontend/
+│   ├── index.html                — Main dubbing studio UI
+│   ├── audiosocket.html          — AudioSocket monitor UI
+│   ├── favicon.ico
+│   └── static/
+│       ├── css/
+│       │   ├── style.css
+│       │   └── audiosocket.css
+│       └── js/
+│           ├── script.js
+│           ├── audiosocket.js
+│           └── wavesurfer.min.js
+├── models/
+│   └── whisper/                  — Cached Whisper model files (.pt)
+├── outputs/                      — Generated stereo dubs + SRTs
+├── audiosocket/                  — AudioSocket session recordings
+│   └── {uuid}/
+├── audiosocket.json              — AudioSocket server configuration
+├── requirements.txt
+├── download_models.py            — Pre-download Whisper models
+├── install.bat                   — First-time setup script
+├── run.bat                       — Application launcher
+└── .gitignore
+```
+
+---
 
 ## ⚖ License
 
 MIT
-Screenshots
-
-<img width="1113" height="626" alt="image" src="https://github.com/user-attachments/assets/f172bf71-4550-4174-b985-24d7c84f9874" />
-
-------------------------------------------------------------
-
-<img width="1442" height="618" alt="image" src="https://github.com/user-attachments/assets/c68d317a-06ff-42c0-b347-a1bd3c2da2dd" />
-
-------------------------------------------------------------
-
-<img width="1417" height="927" alt="image" src="https://github.com/user-attachments/assets/c3dc1fc9-beb1-42ed-aed6-a3f3a760d577" />
-
 
 ---
+
 *Powered by [mhrgl.com](https://mhrgl.com)*

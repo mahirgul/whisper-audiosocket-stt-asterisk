@@ -33,6 +33,7 @@ This is just a test project. It was created as a sample.
    python -m venv venv
    .\venv\Scripts\Activate.ps1
    pip install -r requirements.txt
+   pip install audioop-lts
    ```
 
 4. **Install FFmpeg:**

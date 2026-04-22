@@ -18,13 +18,19 @@ This is just a test project. It was created as a sample.
 
 ## 🛠 Installation
 
-1. **Clone the repository:**
+2. **Test Environmet:**
+   Windows 11
+   Windows Terminal App
+   Powershell 7.6.1
+   Python 3.14
+   
+2. **Clone the repository:**
    ```bash
    git clone Stereo-Dubbing-Pro-V2
    cd stereo-dubbing-pro-v2
    ```
-
-2. **Setup Virtual Environment:**
+      
+3. **Setup Virtual Environment:**
    (with Powershell)
    ```bash
    winget install Python.Python.3.14

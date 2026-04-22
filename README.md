@@ -19,10 +19,10 @@ This is just a test project. It was created as a sample.
 ## 🛠 Installation
 
 2. **Test Environmet:**
-   Windows 11
-   Windows Terminal App
-   Powershell 7.6.1
-   Python 3.14
+   - Windows 11
+   - Windows Terminal App
+   - Powershell 7.6.1
+   - Python 3.14
    
 2. **Clone the repository:**
    ```bash

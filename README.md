@@ -25,16 +25,17 @@ This is just a test project. It was created as a sample.
    ```
 
 2. **Setup Virtual Environment:**
+   (with Powershell)
    ```bash
    winget install Python.Python.3.14
    winget install ffmpeg
    
    python -m venv venv
-   venv\Scripts\activate.bat
+   .\venv\Scripts\Activate.ps1
    pip install -r requirements.txt
    ```
 
-3. **Install FFmpeg:**
+4. **Install FFmpeg:**
    This project requires FFmpeg. Ensure it's installed and added to your system's PATH.
 
 ## 💻 Usage

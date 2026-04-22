@@ -26,7 +26,8 @@ args, unknown = parser.parse_known_args()
 # Load model in background
 threading.Thread(target=processor.load_model, args=(args.model,), daemon=True).start()
 
-OUTPUT_DIR = "c:/llm/outputs"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
 if not os.path.exists(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)
 
 job_store = {}

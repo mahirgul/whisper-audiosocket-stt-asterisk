@@ -13,7 +13,8 @@
     <script src="/static/js/script.js" defer></script>
 </head>
 <body>
-    <div id="modelOverlay"><div class="spinner"></div><p style="margin-top:20px;">Waking up the AI...</p></div>
+
+    <div id="modelOverlay"><div class="spinner"></div><p style="margin-top:20px; font-size:0.85rem; color:#64748b; font-weight:700;">Waking up the AI...</p></div>
 
     <!-- Shared topbar navigation -->
     <nav class="topbar">
@@ -32,26 +33,42 @@
     </nav>
 
     <div class="container">
+
+        <!-- ── Left: main content ───────────────────────── -->
         <div class="left-panel">
 
-
+            <!-- Stats bar -->
             <div class="stats-bar">
-                <div class="stat-item">CPU <div id="sCpu" style="font-weight:700;">0%</div></div>
-                <div class="stat-item">RAM <div id="sRam" style="font-weight:700;">0/0GB</div></div>
-                <div class="stat-item">TASK <div id="sTask" style="font-weight:700; color:var(--primary);">Idle</div></div>
+                <div class="stat-item">
+                    <strong id="sCpu">0%</strong>
+                    CPU
+                </div>
+                <div class="stat-item">
+                    <strong id="sRam">0/0 GB</strong>
+                    RAM
+                </div>
+                <div class="stat-item">
+                    <strong id="sTask" style="color:var(--primary);">Idle</strong>
+                    TASK
+                </div>
             </div>
 
-            <div class="main-card">
+            <!-- Dubbing studio card -->
+            <div class="main-card card">
+                <div class="card-header">
+                    🎛 Dubbing Studio
+                </div>
                 <div id="setupArea">
                     <div class="tabs">
                         <button class="tab-btn active" onclick="switchTab('file')">FILE UPLOAD</button>
                         <button class="tab-btn" onclick="switchTab('text')">TEXT TO DUB</button>
                     </div>
 
-                    <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap;">
-                        <div style="text-align: left;">
-                            <label style="font-size: 0.65rem; font-weight: 800; color: #94a3b8; display: block; margin-bottom: 5px;">TARGET LANGUAGE</label>
-                            <select id="targetLang" style="padding:8px; border-radius:8px; border: 1px solid var(--border); width: 120px;">
+                    <!-- Options row -->
+                    <div class="options-row">
+                        <div class="form-group">
+                            <label>TARGET LANGUAGE</label>
+                            <select id="targetLang">
                                 <option value="de">German</option>
                                 <option value="en">English</option>
                                 <option value="tr">Turkish</option>
@@ -67,29 +84,30 @@
                                 <option value="hi">Hindi</option>
                             </select>
                         </div>
-                        <div style="text-align: left;">
-                            <label style="font-size: 0.65rem; font-weight: 800; color: #94a3b8; display: block; margin-bottom: 5px;">SYNC MODE</label>
-                            <select id="syncMode" style="padding:8px; border-radius:8px; border: 1px solid var(--border); width: 150px;">
+                        <div class="form-group">
+                            <label>SYNC MODE</label>
+                            <select id="syncMode">
                                 <option value="independent">Independent Channels</option>
                                 <option value="original">Original (Allow Overlap)</option>
                                 <option value="unified">Unified Timeline</option>
                             </select>
                         </div>
-                        <div style="text-align: left;">
-                            <label style="font-size: 0.65rem; font-weight: 800; color: #94a3b8; display: block; margin-bottom: 5px;">VOICE</label>
-                            <select id="voiceType" style="padding:8px; border-radius:8px; border: 1px solid var(--border); width: 180px;">
+                        <div class="form-group">
+                            <label>VOICE</label>
+                            <select id="voiceType">
                                 <option value="M">Default Male</option>
                                 <option value="F">Default Female</option>
                                 <option value="auto">Auto-Detect</option>
                                 <optgroup label="All Available Voices" id="voiceGroup"></optgroup>
                             </select>
                         </div>
-                        <div style="text-align: left; display: flex; align-items: center; padding-top: 15px;">
-                            <input type="checkbox" id="asteriskFormat" style="margin-right: 5px;">
-                            <label for="asteriskFormat" style="font-size: 0.65rem; font-weight: 800; color: #64748b;">ASTERISK (8Khz WAV)</label>
+                        <div class="form-group asterisk-check">
+                            <label for="asteriskFormat">ASTERISK (8KHz WAV)</label>
+                            <input type="checkbox" id="asteriskFormat">
                         </div>
                     </div>
 
+                    <!-- File tab -->
                     <div id="fileTab" class="tab-content active">
                         <div id="uploadArea" class="drop-zone" onclick="document.getElementById('f').click()">
                             <div id="fL">Drop Stereo Audio or Click to Upload</div>
@@ -97,53 +115,68 @@
                         </div>
                     </div>
 
+                    <!-- Text tab -->
                     <div id="textTab" class="tab-content">
-                        <textarea id="inputText" placeholder="Enter text here to translate and dub into stereo audio..." style="width:100%; height:120px; border-radius:10px; border:1px solid var(--border); padding:15px; font-family:inherit; margin-bottom:15px;"></textarea>
+                        <textarea id="inputText" placeholder="Enter text here to translate and dub into stereo audio..."></textarea>
                         <button class="btn" onclick="startText()" style="width:100%;">GENERATE STEREO DUB FROM TEXT</button>
                     </div>
                 </div>
 
                 <div id="loadingBar">...</div>
-                
+
+                <!-- Player -->
                 <div id="playerCard" class="player-card">
-                    <p id="playingLabel" style="font-size:0.7rem; color:#94a3b8; margin-bottom:10px; font-weight:800;">PLAYER</p>
+                    <div class="player-header">🎧 Audio Player &mdash; <span id="playingLabel"></span></div>
                     <div id="waveform"></div>
                     <div class="controls">
                         <button id="playPause" class="btn">PLAY / PAUSE</button>
-                        <button id="btnLeft" class="btn btn-secondary">LEFT (L)</button>
+                        <button id="btnLeft"  class="btn btn-secondary">LEFT (L)</button>
                         <button id="btnRight" class="btn btn-secondary">RIGHT (R)</button>
-                        <button id="btnBoth" class="btn btn-secondary btn-active">BOTH (STEREO)</button>
+                        <button id="btnBoth"  class="btn btn-secondary btn-active">BOTH (STEREO)</button>
                     </div>
                     <button id="btnNew" class="btn btn-new" onclick="resetUI()">+ START NEW TASK</button>
                 </div>
             </div>
 
-            <div id="resultsGrid" class="results-grid" style="display: none;">
+            <!-- Transcript cards -->
+            <div id="resultsGrid" class="results-grid" style="display:none;">
                 <div class="section-label">Transcripts</div>
                 <div class="card"><div class="card-header">ORIGINAL LEFT</div><div id="boxOL" class="content">...</div></div>
                 <div class="card"><div class="card-header">ORIGINAL RIGHT</div><div id="boxOR" class="content">...</div></div>
                 <div class="card"><div class="card-header">TRANSLATED LEFT</div><div id="boxTL" class="content">...</div></div>
                 <div class="card"><div class="card-header">TRANSLATED RIGHT</div><div id="boxTR" class="content">...</div></div>
             </div>
+
+        </div><!-- /.left-panel -->
+
+        <!-- ── Right: history panel ─────────────────────── -->
+        <div class="card history-panel">
+            <div class="card-header">
+                History
+                <button class="btn btn-sm" style="background:#f1f5f9; color:#64748b;" onclick="loadHistory(1)">🔄 Refresh</button>
+            </div>
+            <div class="card-body">
+                <!-- Bulk actions -->
+                <div id="bulkActions" class="bulk-actions">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <input type="checkbox" id="selectAll" onclick="toggleSelectAll()">
+                        <span id="selectedCount" style="font-size:0.65rem; font-weight:700; color:#e11d48;">0 selected</span>
+                    </div>
+                    <button onclick="deleteSelected()" class="download-link" style="color:white; background:#e11d48; border-color:#e11d48;">DELETE SELECTED</button>
+                </div>
+
+                <div id="historyList"></div>
+                <div id="pagination" class="pagination"></div>
+
+                <div style="text-align:center; margin-top:18px; padding-top:14px; border-top:1px solid var(--border);">
+                    <a href="https://mhrgl.com" target="_blank" style="font-size:0.6rem; color:#94a3b8; text-decoration:none; font-weight:800; letter-spacing:0.5px;">
+                        POWERED BY MHRGL.COM
+                    </a>
+                </div>
+            </div>
         </div>
 
-        <div class="history-panel">
-            <div class="history-title">History <span onclick="loadHistory(1)" style="cursor:pointer; color:var(--primary);">🔄</span></div>
-            <div id="bulkActions" class="bulk-actions">
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <input type="checkbox" id="selectAll" onclick="toggleSelectAll()">
-                    <span id="selectedCount" style="font-size:0.65rem; font-weight:700; color:#e11d48;">0 selected</span>
-                </div>
-                <button onclick="deleteSelected()" class="download-link" style="color:white; background:#e11d48; border-color:#e11d48;">DELETE SELECTED</button>
-            </div>
-            <div id="historyList"></div>
-            <div id="pagination" class="pagination"></div>
-            <div style="text-align: center; margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--border);">
-                <a href="https://mhrgl.com" target="_blank" style="font-size: 0.65rem; color: #94a3b8; text-decoration: none; font-weight: 700;">
-                    POWERED BY MHRGL.COM
-                </a>
-            </div>
-        </div>
-    </div>
+    </div><!-- /.container -->
+
 </body>
 </html>

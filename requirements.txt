@@ -10,3 +10,5 @@ deep-translator
 edge-tts
 numpy
 psutil
+aiohttp
+aiofiles

@@ -1,6 +1,6 @@
 /* ============================================================
    audiosocket.css — AudioSocket Monitor page styles
-   Design tokens inherited from style.css
+   Shared topbar styles live in style.css
    ============================================================ */
 
 :root {
@@ -18,52 +18,6 @@
   --dark-surface: #1e293b;
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
-
-body {
-  font-family: 'Inter', -apple-system, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  min-height: 100vh;
-}
-
-/* ── Top nav bar ──────────────────────────────────────────── */
-.topbar {
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  padding: 0 24px;
-  height: 56px;
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-
-.topbar-logo {
-  font-size: 1.1rem;
-  font-weight: 900;
-  color: var(--primary);
-  text-decoration: none;
-  letter-spacing: -0.5px;
-}
-
-.topbar-nav a {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--muted);
-  text-decoration: none;
-  padding: 6px 12px;
-  border-radius: 6px;
-  transition: 0.2s;
-}
-
-.topbar-nav a:hover,
-.topbar-nav a.active {
-  background: #eff6ff;
-  color: var(--primary);
-}
 
 /* ── Layout ───────────────────────────────────────────────── */
 .as-layout {

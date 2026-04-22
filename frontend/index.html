@@ -4,24 +4,36 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stereo Dubbing Pro - V2</title>
+    <meta name="description" content="AI-powered stereo audio dubbing: transcribe, translate, and synthesize voiceovers with independent channel control.">
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="/static/js/wavesurfer.min.js"></script>
     <script src="/static/js/script.js" defer></script>
 </head>
 <body>
     <div id="modelOverlay"><div class="spinner"></div><p style="margin-top:20px;">Waking up the AI...</p></div>
-    
+
+    <!-- Shared topbar navigation -->
+    <nav class="topbar">
+        <a href="https://mhrgl.com" target="_blank" class="topbar-brand">
+            <div class="brand-icon">🎙</div>
+            <div>
+                <div class="brand-name">Stereo Dubbing Pro</div>
+                <div class="brand-sub">mhrgl.com &middot; V2</div>
+            </div>
+        </a>
+        <div class="topbar-divider"></div>
+        <div class="topbar-nav">
+            <a href="/" class="active"><span class="nav-icon">🎛</span> Dubbing Studio</a>
+            <a href="/audiosocket.html"><span class="nav-icon">📡</span> AudioSocket</a>
+        </div>
+    </nav>
+
     <div class="container">
         <div class="left-panel">
-            <div style="text-align: left; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
-                <a href="https://mhrgl.com" target="_blank" class="glow-link">mhrgl.com</a>
-                <a href="/audiosocket.html" style="font-size:0.65rem; font-weight:800; color:#64748b; text-decoration:none; padding:6px 12px; border:1px solid var(--border); border-radius:8px; transition:0.2s;"
-                   onmouseover="this.style.color='#3b82f6';this.style.borderColor='#3b82f6';"
-                   onmouseout="this.style.color='#64748b';this.style.borderColor='var(--border)';">
-                  📡 AUDIOSOCKET
-                </a>
-            </div>
+
 
             <div class="stats-bar">
                 <div class="stat-item">CPU <div id="sCpu" style="font-weight:700;">0%</div></div>

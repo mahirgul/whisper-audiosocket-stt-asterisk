@@ -1,6 +1,122 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800;900&display=swap');
+
 :root { --primary: #3b82f6; --bg: #f8fafc; --border: #e2e8f0; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Inter', -apple-system, sans-serif; background-color: var(--bg); color: #1e293b; padding-bottom: 50px; }
+body { font-family: 'Inter', -apple-system, sans-serif; background-color: var(--bg); color: #1e293b; padding-bottom: 50px; padding-top: 64px; }
+
+/* ── Shared Topbar ──────────────────────────────────────────── */
+.topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    height: 64px;
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 28px;
+    gap: 0;
+}
+
+.topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    flex-shrink: 0;
+}
+
+.topbar-brand .brand-icon {
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    box-shadow: 0 2px 8px rgba(99,102,241,0.35);
+    flex-shrink: 0;
+}
+
+.topbar-brand .brand-name {
+    font-size: 0.9rem;
+    font-weight: 900;
+    color: #1e293b;
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+}
+
+.topbar-brand .brand-sub {
+    font-size: 0.55rem;
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.topbar-divider {
+    width: 1px;
+    height: 28px;
+    background: var(--border);
+    margin: 0 20px;
+    flex-shrink: 0;
+}
+
+.topbar-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+}
+
+.topbar-nav a {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #64748b;
+    text-decoration: none;
+    padding: 7px 14px;
+    border-radius: 8px;
+    transition: background 0.15s, color 0.15s;
+    letter-spacing: 0.1px;
+}
+
+.topbar-nav a:hover {
+    background: #f1f5f9;
+    color: #1e293b;
+}
+
+.topbar-nav a.active {
+    background: #eff6ff;
+    color: var(--primary);
+}
+
+.topbar-nav a .nav-icon { font-size: 0.9rem; }
+
+.topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.topbar-right a {
+    font-size: 0.65rem;
+    font-weight: 800;
+    color: #94a3b8;
+    text-decoration: none;
+    transition: color 0.15s;
+}
+
+.topbar-right a:hover { color: var(--primary); }
 
 /* Glowing Text Logo */
 .glow-link {

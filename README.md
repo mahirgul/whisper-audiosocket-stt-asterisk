@@ -27,7 +27,7 @@ This is just a test project. It was created as a sample.
 2. **Setup Virtual Environment:**
    ```bash
    python -m venv venv
-   call venv\Scripts\activate.bat
+   venv\Scripts\activate.bat
    pip install -r requirements.txt
    ```
 

@@ -26,6 +26,9 @@ This is just a test project. It was created as a sample.
 
 2. **Setup Virtual Environment:**
    ```bash
+   winget install Python.Python.3.14
+   winget install ffmpeg
+   
    python -m venv venv
    venv\Scripts\activate.bat
    pip install -r requirements.txt

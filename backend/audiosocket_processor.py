@@ -129,9 +129,11 @@ async def process_chunk(
             "duration_ms": int(len(pcm_data) / (sample_rate * channels * sample_width) * 1000)
         })
 
-        whisper_result = await asyncio.to_thread(
-            main_processor.model.transcribe, wav_path
-        )
+        def _locked_transcribe():
+            with main_processor.whisper_lock:
+                return main_processor.model.transcribe(wav_path)
+
+        whisper_result = await asyncio.to_thread(_locked_transcribe)
         segments = whisper_result.get("segments", [])
         orig_text = " ".join(s["text"].strip() for s in segments)
         result["orig_text"] = orig_text
@@ -147,7 +149,7 @@ async def process_chunk(
             for seg in segments:
                 txt = seg["text"].strip()
                 try:
-                    translated = translator.translate(txt) if txt else ""
+                    translated = await asyncio.to_thread(translator.translate, txt) if txt else ""
                 except Exception:
                     translated = txt
                 translated_segments.append({**seg, "text": translated})
@@ -169,8 +171,9 @@ async def process_chunk(
 
         # 5. Synthesize dubbed audio
         voice = _pick_voice(voice_type, target_lang)
-        if tran_text.strip():
-            await edge_tts.Communicate(tran_text, voice).save(dub_mp3)
+        duration_ms = int(len(pcm_data) / (sample_rate * channels * sample_width) * 1000)
+        track = await main_processor.generate_mono_channel_indep(translated_segments, voice, duration_ms)
+        await asyncio.to_thread(track.export, dub_mp3, format="mp3")
 
         await event_cb("dubbed", {
             "uuid": session_id, "chunk_idx": chunk_idx,

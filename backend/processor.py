@@ -16,6 +16,7 @@ import edge_tts
 model = None
 model_status = "loading"
 current_task = "Waking up AI..."
+whisper_lock = threading.Lock()
 
 def load_model(model_name="medium"):
     global model, model_status, current_task
@@ -112,28 +113,39 @@ async def transcribe_audio(file_path, target_lang, output_dir="outputs"):
     # Transcribe L & R
     l_path = file_path + "_l.wav"
     channels[0].export(l_path, format="wav")
-    res_l = await asyncio.to_thread(model.transcribe, l_path)
+    def _locked_transcribe_l():
+        with whisper_lock:
+            return model.transcribe(l_path)
+    res_l = await asyncio.to_thread(_locked_transcribe_l)
     os.unlink(l_path)
 
     r_path = file_path + "_r.wav"
     channels[1].export(r_path, format="wav")
-    res_r = await asyncio.to_thread(model.transcribe, r_path)
+    def _locked_transcribe_r():
+        with whisper_lock:
+            return model.transcribe(r_path)
+    res_r = await asyncio.to_thread(_locked_transcribe_r)
     os.unlink(r_path)
 
     segs_l = process_segments_with_music(res_l['segments'])
     segs_r = process_segments_with_music(res_r['segments'])
 
     translator = GoogleTranslator(source='auto', target=target_lang)
-    def trans_segs(segs):
+    async def trans_segs(segs):
         out = []
         for s in segs:
             txt = s['text'].strip()
-            translated = "[MUSIC]" if txt == "[MUSIC]" else (translator.translate(txt) if txt else "")
+            if txt == "[MUSIC]":
+                translated = "[MUSIC]"
+            elif txt:
+                translated = await asyncio.to_thread(translator.translate, txt)
+            else:
+                translated = ""
             out.append({**s, "text": translated})
         return out
 
-    t_l = trans_segs(segs_l)
-    t_r = trans_segs(segs_r)
+    t_l = await trans_segs(segs_l)
+    t_r = await trans_segs(segs_r)
 
     return {
         "unique_id": unique_id,
@@ -191,7 +203,7 @@ async def process_text_to_dub(text, target_lang, output_dir="outputs"):
     unique_id = str(uuid.uuid4())[:8]
     try:
         translator = GoogleTranslator(source='auto', target=target_lang)
-        translated_text = translator.translate(text)
+        translated_text = await asyncio.to_thread(translator.translate, text)
     except:
         translated_text = text # Fallback to original text if translation fails
     

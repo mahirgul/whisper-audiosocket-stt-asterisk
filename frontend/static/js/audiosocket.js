@@ -54,7 +54,7 @@ function handleSSEEvent(eventType, data) {
       activeConnections[data.uuid] = {
         uuid: data.uuid,
         remote: data.remote_addr,
-        stage: "Connected",
+        stage: "Connected — recording audio",
         chunks: 0,
         startedAt: data.timestamp
       };
@@ -100,6 +100,27 @@ function handleSSEEvent(eventType, data) {
       break;
 
     case "connection_close":
+      if (data.status === "processing") {
+        // Call ended, processing started in background
+        if (activeConnections[data.uuid]) {
+          activeConnections[data.uuid].stage = "📞 Call ended — processing audio…";
+          renderActiveConnections();
+        }
+      } else {
+        delete activeConnections[data.uuid];
+        renderActiveConnections();
+      }
+      loadStatus();
+      break;
+
+    case "processing_started":
+      if (activeConnections[data.uuid]) {
+        activeConnections[data.uuid].stage = "🔄 Transcribing & translating…";
+        renderActiveConnections();
+      }
+      break;
+
+    case "session_processed":
       delete activeConnections[data.uuid];
       renderActiveConnections();
       loadStatus();

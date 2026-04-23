@@ -2,8 +2,8 @@
 audiosocket_server.py
 
 Async TCP server implementing the Asterisk AudioSocket protocol.
-Handles multiple concurrent connections, VAD-based chunking, and
-feeds each audio chunk through the processing pipeline.
+Runs in its OWN dedicated thread with a separate asyncio event loop,
+so heavy processing (Whisper, TTS, etc.) never blocks the FastAPI web server.
 
 AudioSocket protocol (Asterisk):
   Each frame: [type: 1 byte] [length: 2 bytes big-endian] [payload: length bytes]
@@ -15,22 +15,31 @@ AudioSocket protocol (Asterisk):
 import asyncio
 import json
 import os
+import queue
 import struct
+import threading
 import traceback
 import uuid as _uuid
 from datetime import datetime, timezone
 
-import audiosocket_processor as asp
-
 # ---------------------------------------------------------------------------
-# Global state (shared with web.py via this module's namespace)
+# Global state — thread-safe
 # ---------------------------------------------------------------------------
 
+_thread: threading.Thread | None = None
+_loop: asyncio.AbstractEventLoop | None = None    # event loop of the AS thread
 _server: asyncio.AbstractServer | None = None
+
 _config: dict = {}
-_active_connections: dict[str, dict] = {}   # uuid → session meta
-_event_queue: asyncio.Queue = asyncio.Queue()  # SSE event bus
-_BASE_DIR: str = ""   # Set at startup by web.py (project root)
+_config_lock = threading.Lock()
+
+_active_connections: dict[str, dict] = {}          # uuid → session meta
+_connections_lock = threading.Lock()
+
+# Thread-safe queue: AS thread puts events, FastAPI thread reads them
+_event_queue: queue.Queue = queue.Queue()
+
+_BASE_DIR: str = ""
 
 # AudioSocket frame type constants
 FRAME_HANGUP = 0x00
@@ -39,7 +48,7 @@ FRAME_AUDIO  = 0x10
 
 
 # ---------------------------------------------------------------------------
-# Public interface (called by web.py)
+# Public interface (called by web.py — runs in FastAPI's thread)
 # ---------------------------------------------------------------------------
 
 def set_base_dir(base_dir: str) -> None:
@@ -48,20 +57,30 @@ def set_base_dir(base_dir: str) -> None:
 
 
 def get_status() -> dict:
+    with _connections_lock:
+        conns = list(_active_connections.values())
+        count = len(conns)
+    with _config_lock:
+        port = _config.get("port", 9092)
     return {
-        "listening": _server is not None and _server.is_serving(),
-        "port": _config.get("port", 9092),
-        "active_connections": len(_active_connections),
-        "sessions": list(_active_connections.values()),
+        "listening": _server is not None and _thread is not None and _thread.is_alive(),
+        "port": port,
+        "active_connections": count,
+        "sessions": conns,
     }
 
 
 def get_active_connections() -> dict:
-    return _active_connections
+    with _connections_lock:
+        return dict(_active_connections)
 
 
-async def get_event_queue() -> asyncio.Queue:
-    return _event_queue
+def get_event() -> dict | None:
+    """Non-blocking get from the thread-safe event queue. Returns None if empty."""
+    try:
+        return _event_queue.get_nowait()
+    except queue.Empty:
+        return None
 
 
 def load_config(config_path: str) -> dict:
@@ -87,7 +106,6 @@ def load_config(config_path: str) -> dict:
     if os.path.exists(config_path):
         with open(config_path, "r", encoding="utf-8") as f:
             loaded = json.load(f)
-        # Merge with defaults for missing keys
         for k, v in defaults.items():
             if k not in loaded:
                 loaded[k] = v
@@ -95,30 +113,60 @@ def load_config(config_path: str) -> dict:
     return defaults
 
 
-async def start_server(config_path: str) -> None:
-    """Start (or restart) the AudioSocket TCP server."""
-    global _server, _config
+def start_server(config_path: str) -> None:
+    """Start (or restart) the AudioSocket TCP server in a dedicated thread."""
+    global _thread, _loop, _config
 
     # Stop existing server if running
-    if _server is not None:
-        _server.close()
-        await _server.wait_closed()
-        _server = None
-        print("[AudioSocket] Previous server stopped.")
+    stop_server()
 
-    _config = load_config(config_path)
-    port = _config.get("port", 9092)
+    with _config_lock:
+        _config = load_config(config_path)
+        port = _config.get("port", 9092)
 
+    _loop = asyncio.new_event_loop()
+
+    def _run():
+        asyncio.set_event_loop(_loop)
+        _loop.run_until_complete(_start_tcp(port))
+        _loop.run_forever()
+
+    _thread = threading.Thread(target=_run, daemon=True, name="AudioSocket-Thread")
+    _thread.start()
+    print(f"[AudioSocket] Server thread started — listening on port {port}")
+
+
+def stop_server() -> None:
+    global _server, _thread, _loop
+    if _loop is not None and _server is not None:
+        try:
+            asyncio.run_coroutine_threadsafe(_stop_tcp(), _loop).result(timeout=5)
+        except Exception:
+            pass
+    if _loop is not None:
+        _loop.call_soon_threadsafe(_loop.stop)
+    if _thread is not None:
+        _thread.join(timeout=5)
+    _server = None
+    _thread = None
+    _loop = None
+
+
+# ---------------------------------------------------------------------------
+# Internal async functions (run inside the AS thread's event loop)
+# ---------------------------------------------------------------------------
+
+async def _start_tcp(port: int) -> None:
+    global _server
     _server = await asyncio.start_server(
         _connection_handler,
         host="0.0.0.0",
         port=port
     )
-    print(f"[AudioSocket] Listening on port {port}")
-    asyncio.ensure_future(_server.serve_forever())
+    print(f"[AudioSocket] TCP server bound to 0.0.0.0:{port}")
 
 
-async def stop_server() -> None:
+async def _stop_tcp() -> None:
     global _server
     if _server:
         _server.close()
@@ -127,7 +175,7 @@ async def stop_server() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Connection handler
+# Connection handler (runs inside the AS thread)
 # ---------------------------------------------------------------------------
 
 async def _connection_handler(reader: asyncio.StreamReader,
@@ -144,98 +192,133 @@ async def _connection_handler(reader: asyncio.StreamReader,
             writer.close()
             return
 
+        with _connections_lock:
+            if session_id in _active_connections:
+                session_id = f"{session_id}-{_uuid.uuid4().hex[:4]}"
+
         print(f"[AudioSocket] Connection from {remote} — session {session_id}")
 
         out_dir = _session_dir(session_id)
         os.makedirs(out_dir, exist_ok=True)
 
         # Register active connection
-        _active_connections[session_id] = {
-            "uuid": session_id,
-            "remote": str(remote),
-            "started": start_time.isoformat(),
-            "chunks": 0,
-            "status": "active"
-        }
+        with _connections_lock:
+            _active_connections[session_id] = {
+                "uuid": session_id,
+                "remote": str(remote),
+                "started": start_time.isoformat(),
+                "chunks": 0,
+                "status": "active"
+            }
 
-        await _emit("connection_open", {
+        _emit_sync("connection_open", {
             "uuid": session_id,
             "remote_addr": str(remote),
             "timestamp": start_time.isoformat()
         })
 
         # Save session metadata
-        await _save_session_meta(session_id, out_dir, "active")
-
-        # Audio accumulation
-        sample_rate  = _config.get("input_sample_rate", 8000)
-        channels     = _config.get("input_channels", 1)
-        sample_width = _config.get("input_sample_width", 2)
-        silence_ms   = _config.get("vad_silence_threshold_ms", 1500)
-        min_ms       = _config.get("vad_min_chunk_ms", 1000)
-
-        # bytes per ms of audio
-        bytes_per_ms = (sample_rate * channels * sample_width) // 1000
-        silence_bytes_threshold = silence_ms * bytes_per_ms
-        min_chunk_bytes = min_ms * bytes_per_ms
+        _save_session_meta_sync(session_id, out_dir, "active")
 
         audio_buf = bytearray()
-        silence_buf = bytearray()
-        chunk_idx = 0
+        connection_alive = True
 
-        while True:
-            frame_type, payload = await _read_frame(reader)
+        # Build a silence frame to send back to Asterisk
+        with _config_lock:
+            sample_rate = _config.get("input_sample_rate", 8000)
+            channels = _config.get("input_channels", 1)
+            sample_width = _config.get("input_sample_width", 2)
 
-            if frame_type is None or frame_type == FRAME_HANGUP:
-                # Flush remaining audio
-                if len(audio_buf) >= min_chunk_bytes:
-                    chunk_idx += 1
-                    await _process_chunk(session_id, chunk_idx, bytes(audio_buf),
-                                         out_dir)
-                break
+        silence_frame_ms = 20
+        silence_frame_bytes = (sample_rate * channels * sample_width * silence_frame_ms) // 1000
+        silence_payload = b'\x00' * silence_frame_bytes
+        silence_header = struct.pack("B", FRAME_AUDIO) + struct.pack(">H", silence_frame_bytes)
+        silence_frame = silence_header + silence_payload
 
-            if frame_type == FRAME_AUDIO:
-                # Simple VAD: detect silence by checking RMS energy
-                is_silent = _is_silent(payload, sample_width)
+        async def _send_silence():
+            nonlocal connection_alive
+            try:
+                while connection_alive:
+                    writer.write(silence_frame)
+                    await writer.drain()
+                    await asyncio.sleep(silence_frame_ms / 1000.0)
+            except (ConnectionResetError, BrokenPipeError, OSError):
+                connection_alive = False
 
-                if is_silent:
-                    silence_buf.extend(payload)
-                    if len(silence_buf) >= silence_bytes_threshold:
-                        # Silence threshold reached — flush audio chunk
-                        if len(audio_buf) >= min_chunk_bytes:
-                            chunk_idx += 1
-                            _active_connections[session_id]["chunks"] = chunk_idx
-                            await _process_chunk(session_id, chunk_idx,
-                                                 bytes(audio_buf), out_dir)
-                            audio_buf.clear()
-                        silence_buf.clear()
-                else:
-                    # Non-silent audio — include accumulated silence + new audio
-                    audio_buf.extend(silence_buf)
-                    audio_buf.extend(payload)
-                    silence_buf.clear()
+        async def _read_audio():
+            nonlocal connection_alive
+            try:
+                while connection_alive:
+                    frame_type, payload = await _read_frame(reader)
+                    if frame_type is None or frame_type == FRAME_HANGUP:
+                        break
+                    if frame_type == FRAME_AUDIO:
+                        audio_buf.extend(payload)
+            except (asyncio.IncompleteReadError, ConnectionResetError, OSError):
+                pass
+            finally:
+                connection_alive = False
 
-        # Mark session closed
+        # Run both tasks concurrently
+        silence_task = asyncio.create_task(_send_silence())
+        await _read_audio()
+        silence_task.cancel()
+        try:
+            await silence_task
+        except asyncio.CancelledError:
+            pass
+
+        # Connection ended
         duration_s = (datetime.now(timezone.utc) - start_time).total_seconds()
-        _active_connections.pop(session_id, None)
-        await _save_session_meta(session_id, out_dir, "completed",
-                                 total_chunks=chunk_idx,
-                                 duration_s=round(duration_s, 1))
-        await _emit("connection_close", {
-            "uuid": session_id,
-            "total_chunks": chunk_idx,
-            "duration_s": round(duration_s, 1)
-        })
+        print(f"[AudioSocket] Connection ended — session {session_id}, "
+              f"{len(audio_buf)} bytes, {round(duration_s, 1)}s")
 
-    except asyncio.IncompleteReadError:
-        print(f"[AudioSocket] Connection closed unexpectedly — {session_id}")
+        if len(audio_buf) > 0:
+            with _connections_lock:
+                if session_id in _active_connections:
+                    _active_connections[session_id]["status"] = "processing"
+
+            _emit_sync("connection_close", {
+                "uuid": session_id,
+                "total_chunks": 0,
+                "duration_s": round(duration_s, 1),
+                "status": "processing"
+            })
+
+            # Process in a background thread so this handler can finish
+            threading.Thread(
+                target=_process_session_blocking,
+                args=(session_id, bytes(audio_buf), out_dir, duration_s),
+                daemon=True,
+                name=f"AS-Process-{session_id[:8]}"
+            ).start()
+        else:
+            with _connections_lock:
+                _active_connections.pop(session_id, None)
+            _save_session_meta_sync(session_id, out_dir, "completed",
+                                    total_chunks=0,
+                                    duration_s=round(duration_s, 1))
+            _emit_sync("connection_close", {
+                "uuid": session_id,
+                "total_chunks": 0,
+                "duration_s": round(duration_s, 1)
+            })
+
     except Exception as e:
         traceback.print_exc()
         if session_id:
-            await _emit("error", {"uuid": session_id, "message": str(e)})
+            with _connections_lock:
+                _active_connections.pop(session_id, None)
+            _emit_sync("error", {"uuid": session_id, "message": str(e)})
+            _emit_sync("connection_close", {
+                "uuid": session_id,
+                "total_chunks": 0,
+                "duration_s": 0
+            })
     finally:
         if session_id:
-            _active_connections.pop(session_id, None)
+            with _connections_lock:
+                _active_connections.pop(session_id, None)
         writer.close()
         try:
             await writer.wait_closed()
@@ -270,7 +353,7 @@ async def _read_uuid_frame(reader: asyncio.StreamReader) -> str | None:
     Read frames until we get the UUID frame (type 0x01).
     Returns UUID as a hex string, or None on failure.
     """
-    for _ in range(10):  # Try up to 10 frames
+    for _ in range(10):
         frame_type, payload = await _read_frame(reader)
         if frame_type is None:
             return None
@@ -281,50 +364,92 @@ async def _read_uuid_frame(reader: asyncio.StreamReader) -> str | None:
     return None
 
 
-# ---------------------------------------------------------------------------
-# VAD helper
-# ---------------------------------------------------------------------------
+import subprocess
+import sys
 
-def _is_silent(pcm_bytes: bytes, sample_width: int,
-               silence_rms_threshold: int = 300) -> bool:
+def _process_session_blocking(session_id: str, pcm_data: bytes,
+                               out_dir: str, duration_s: float) -> None:
     """
-    Returns True if the audio chunk is considered silent.
-    Uses RMS energy of the PCM samples.
+    Saves raw PCM to disk, then spawns audiosocket_worker.py as a
+    SEPARATE PROCESS. This completely avoids Python GIL contention —
+    the web server stays responsive even during heavy Whisper inference.
     """
-    if not pcm_bytes:
-        return True
+    try:
+        # Save raw PCM so the worker process can read it
+        pcm_path = os.path.join(out_dir, "raw.pcm")
+        with open(pcm_path, "wb") as f:
+            f.write(pcm_data)
 
-    import struct as _struct
-    fmt = {1: "b", 2: "h", 4: "i"}.get(sample_width, "h")
-    num_samples = len(pcm_bytes) // sample_width
-    if num_samples == 0:
-        return True
+        # Write current config for the worker
+        config_path = os.path.join(out_dir, "worker_config.json")
+        with _config_lock:
+            cfg = dict(_config)
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(cfg, f)
 
-    samples = _struct.unpack(f"<{num_samples}{fmt}", pcm_bytes[:num_samples * sample_width])
-    rms = (sum(s * s for s in samples) / num_samples) ** 0.5
-    return rms < silence_rms_threshold
+        # Determine model name from web.py's args (default: medium)
+        model_name = cfg.get("whisper_model", "medium")
+
+        # Spawn worker as a completely separate process
+        worker_script = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "audiosocket_worker.py"
+        )
+
+        _emit_sync("processing_started", {
+            "uuid": session_id,
+            "duration_s": round(duration_s, 1)
+        })
+
+        print(f"[AudioSocket] Spawning worker process for session {session_id[:8]}...")
+
+        result = subprocess.run(
+            [sys.executable, worker_script, out_dir, config_path, model_name],
+            capture_output=True,
+            text=True
+        )
+
+        if result.returncode == 0:
+            print(f"[AudioSocket] Worker completed for session {session_id[:8]}")
+            _emit_sync("session_processed", {
+                "uuid": session_id,
+                "total_chunks": 1,
+                "duration_s": round(duration_s, 1)
+            })
+        else:
+            print(f"[AudioSocket] Worker FAILED for session {session_id[:8]}")
+            print(f"[Worker STDERR] {result.stderr[-500:]}" if result.stderr else "")
+            _emit_sync("error", {
+                "uuid": session_id,
+                "message": f"Worker failed: {result.stderr[-200:]}" if result.stderr else "Worker failed"
+            })
+
+        if result.stdout:
+            for line in result.stdout.strip().split("\n"):
+                print(f"  [Worker] {line}")
+
+    except Exception as e:
+        traceback.print_exc()
+        _emit_sync("error", {"uuid": session_id, "message": str(e)})
+    finally:
+        with _connections_lock:
+            _active_connections.pop(session_id, None)
+        _save_session_meta_sync(session_id, out_dir, "completed",
+                                total_chunks=1,
+                                duration_s=round(duration_s, 1))
 
 
 # ---------------------------------------------------------------------------
-# Processing + IO helpers
+# Event + IO helpers (thread-safe, synchronous)
 # ---------------------------------------------------------------------------
 
-async def _process_chunk(session_id: str, chunk_idx: int, pcm_data: bytes,
-                          out_dir: str) -> None:
-    """Dispatch one audio chunk through the full processing pipeline."""
-    await asp.process_chunk(
-        session_id=session_id,
-        chunk_idx=chunk_idx,
-        pcm_data=pcm_data,
-        config=_config,
-        out_dir=out_dir,
-        event_cb=_emit
-    )
+def _emit_sync(event_type: str, payload: dict) -> None:
+    """Thread-safe: push event to the queue (called from any thread)."""
+    _event_queue.put({"event": event_type, "data": payload})
 
 
-async def _emit(event_type: str, payload: dict) -> None:
-    """Push an SSE event onto the global queue."""
-    await _event_queue.put({"event": event_type, "data": payload})
+async def _emit_async(event_type: str, payload: dict) -> None:
+    """Async wrapper for _emit_sync (used as event_cb in processor)."""
+    _emit_sync(event_type, payload)
 
 
 def _session_dir(session_id: str) -> str:
@@ -332,8 +457,9 @@ def _session_dir(session_id: str) -> str:
     return os.path.join(base, "audiosocket", session_id)
 
 
-async def _save_session_meta(session_id: str, out_dir: str, status: str,
-                              total_chunks: int = 0, duration_s: float = 0.0) -> None:
+def _save_session_meta_sync(session_id: str, out_dir: str, status: str,
+                             total_chunks: int = 0, duration_s: float = 0.0) -> None:
+    """Synchronous session metadata writer (safe from any thread)."""
     meta_path = os.path.join(out_dir, "session.json")
     existing = {}
     if os.path.exists(meta_path):
@@ -343,10 +469,13 @@ async def _save_session_meta(session_id: str, out_dir: str, status: str,
         except Exception:
             pass
 
+    with _config_lock:
+        cfg = dict(_config)
+
     existing.update({
         "uuid": session_id,
         "status": status,
-        "config": _config,
+        "config": cfg,
         "updated": datetime.now(timezone.utc).isoformat(),
     })
     if status == "active" and "started" not in existing:
@@ -356,6 +485,5 @@ async def _save_session_meta(session_id: str, out_dir: str, status: str,
         existing["duration_s"] = duration_s
         existing["completed"] = datetime.now(timezone.utc).isoformat()
 
-    import aiofiles
-    async with aiofiles.open(meta_path, "w", encoding="utf-8") as f:
-        await f.write(json.dumps(existing, ensure_ascii=False, indent=2))
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(existing, f, ensure_ascii=False, indent=2)

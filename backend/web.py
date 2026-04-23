@@ -28,9 +28,9 @@ async def lifespan(app: FastAPI):
     # Tell the AudioSocket server where the project root is
     as_srv.set_base_dir(BASE_DIR)
     config_path = os.path.join(BASE_DIR, "audiosocket.json")
-    await as_srv.start_server(config_path)
+    as_srv.start_server(config_path)
     yield
-    await as_srv.stop_server()
+    as_srv.stop_server()
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -329,7 +329,7 @@ async def as_save_config(config: dict):
     """
     with open(AUDIOSOCKET_CONFIG, "w", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=2)
-    await as_srv.start_server(AUDIOSOCKET_CONFIG)
+    as_srv.start_server(AUDIOSOCKET_CONFIG)
     return {"status": "saved", "config": config}
 
 
@@ -391,7 +391,7 @@ async def as_session_detail(session_uuid: str):
     chunks = []
     files = sorted(os.listdir(session_dir))
     chunk_indices = sorted({
-        int(n.split("_")[1])
+        int(n.split("_")[1].split(".")[0])
         for n in files
         if n.startswith("chunk_") and "_" in n
     })
@@ -430,21 +430,26 @@ async def as_delete_session(session_uuid: str):
 async def as_sse_stream():
     """
     Server-Sent Events endpoint for real-time AudioSocket monitoring.
-    Clients connect once and receive all events as they happen.
+    Polls the thread-safe queue from the AudioSocket thread.
     """
-    queue = as_srv._event_queue
-
     async def event_generator():
-        # Send initial connection confirmation
         yield "data: {\"event\": \"connected\"}\n\n"
         while True:
-            try:
-                event = await asyncio.wait_for(queue.get(), timeout=15.0)
+            event = as_srv.get_event()
+            if event is not None:
                 payload = json.dumps({"event": event["event"], "data": event["data"]})
                 yield f"data: {payload}\n\n"
-            except asyncio.TimeoutError:
-                # Keep-alive ping
-                yield ": ping\n\n"
+            else:
+                # No event — send keep-alive ping after a short sleep
+                await asyncio.sleep(0.1)
+                # Check again before sending ping
+                event = as_srv.get_event()
+                if event is not None:
+                    payload = json.dumps({"event": event["event"], "data": event["data"]})
+                    yield f"data: {payload}\n\n"
+                else:
+                    yield ": ping\n\n"
+                    await asyncio.sleep(1.0)
 
     return StreamingResponse(
         event_generator(),

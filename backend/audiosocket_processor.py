@@ -11,9 +11,16 @@ import wave
 import asyncio
 import aiofiles
 import traceback
-from deep_translator import GoogleTranslator
+import local_translator
 
 import model_manager
+
+
+# ---------------------------------------------------------------------------
+# Global state
+# ---------------------------------------------------------------------------
+
+_transcription_semaphore = asyncio.Semaphore(1)  # one transcription at a time
 
 
 # ---------------------------------------------------------------------------
@@ -112,23 +119,26 @@ async def process_chunk(
             "duration_ms": int(len(pcm_data) / (sample_rate * channels * sample_width) * 1000)
         })
 
-        whisper_result = await model_manager.transcribe_async(wav_path)
+        async with _transcription_semaphore:
+            whisper_result = await model_manager.transcribe_async(wav_path)
+        
         segments = whisper_result.get("segments", [])
+        detected_lang = whisper_result.get("language", "en")
         orig_text = " ".join(s["text"].strip() for s in segments)
         result["orig_text"] = orig_text
 
         await event_cb("transcribed", {
-            "uuid": session_id, "chunk_idx": chunk_idx, "text": orig_text
+            "uuid": session_id, "chunk_idx": chunk_idx, "text": orig_text,
+            "detected_lang": detected_lang
         })
 
         # 3. Translate
         translated_segments = []
         if segments and target_lang:
-            translator = GoogleTranslator(source="auto", target=target_lang)
             for seg in segments:
                 txt = seg["text"].strip()
                 try:
-                    translated = await asyncio.to_thread(translator.translate, txt) if txt else ""
+                    translated = await asyncio.to_thread(local_translator.translate, txt, detected_lang, target_lang) if txt else ""
                 except Exception:
                     translated = txt
                 translated_segments.append({**seg, "text": translated})

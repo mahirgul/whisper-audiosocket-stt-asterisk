@@ -3,63 +3,28 @@ import time
 import uuid
 import asyncio
 from pydub import AudioSegment
-from deep_translator import GoogleTranslator
 
 import model_manager
+import local_translator
 
 # ---------------------------------------------------------------------------
-# Expose model status from model_manager so web.py stats loop still works
+# Module-level status variables (read/written by web.py)
 # ---------------------------------------------------------------------------
-
-def _get_model_status():
-    return model_manager.model_status
-
-def _set_model_status(value):
-    model_manager.model_status = value
-
-def _get_current_task():
-    return model_manager.current_task
-
-def _set_current_task(value):
-    model_manager.current_task = value
-
-# These module-level attributes are now properties backed by model_manager
-# Access them via processor.model_status / processor.current_task
-class _StatusProxy:
-    """Tiny descriptor-like proxy so web.py can read/write
-    processor.model_status and processor.current_task transparently."""
-    @property
-    def model_status(self):
-        return model_manager.model_status
-    @model_status.setter
-    def model_status(self, v):
-        model_manager.model_status = v
-    @property
-    def current_task(self):
-        return model_manager.current_task
-    @current_task.setter
-    def current_task(self, v):
-        model_manager.current_task = v
-
-_proxy = _StatusProxy()
-
-# Module-level variables that web.py reads/writes directly.
-# We keep them as plain strings and sync from model_manager in update_stats.
 model_status = "loading"
 current_task = "Waking up AI..."
 
-def load_model(model_name="medium"):
-    """Start the shared model worker process.
-    Called once at startup from web.py.
-    """
+def sync_status():
+    """Sync model_manager status into module-level variables
+    so web.py's update_stats loop can read them."""
     global model_status, current_task
-    model_manager.start(model_name)
-    # Status will be updated by sync_status() calls from web.py
+    model_status = model_manager.model_status
+    current_task = model_manager.current_task
 
 def to_srt(segments, tag=""):
+    def ts(x):
+        return f"{time.strftime('%H:%M:%S', time.gmtime(x))},{int((x % 1) * 1000):03d}"
     srt = []
     for i, s in enumerate(segments):
-        ts = lambda x: f"{time.strftime('%H:%M:%S', time.gmtime(x))},{int((x%1)*1000):03d}"
         txt = s['text'].strip()
         srt.append(f"{i+1}\n{ts(s['start'])} --> {ts(s['end'])}\n[{tag}] {txt}\n")
     return "\n".join(srt)
@@ -77,13 +42,6 @@ def process_segments_with_music(segments, min_gap=3.0):
                 processed.append({'start': prev_end, 'end': curr_start, 'text': "[MUSIC]"})
         processed.append(s)
     return processed
-
-def sync_status():
-    """Sync model_manager status into module-level variables
-    so web.py's update_stats loop can read them."""
-    global model_status, current_task
-    model_status = model_manager.model_status
-    current_task = model_manager.current_task
 
 
 async def transcribe_audio(file_path, target_lang, output_dir="outputs"):
@@ -113,22 +71,24 @@ async def transcribe_audio(file_path, target_lang, output_dir="outputs"):
     segs_l = process_segments_with_music(res_l.get('segments', []))
     segs_r = process_segments_with_music(res_r.get('segments', []))
 
-    translator = GoogleTranslator(source='auto', target=target_lang)
-    async def trans_segs(segs):
+    from_l = res_l.get('language', 'auto')
+    from_r = res_r.get('language', 'auto')
+
+    async def trans_segs(segs, from_code):
         out = []
         for s in segs:
             txt = s['text'].strip()
             if txt == "[MUSIC]":
                 translated = "[MUSIC]"
             elif txt:
-                translated = await asyncio.to_thread(translator.translate, txt)
+                translated = await asyncio.to_thread(local_translator.translate, txt, from_code, target_lang)
             else:
                 translated = ""
             out.append({**s, "text": translated})
         return out
 
-    t_l = await trans_segs(segs_l)
-    t_r = await trans_segs(segs_r)
+    t_l = await trans_segs(segs_l, from_l)
+    t_r = await trans_segs(segs_r, from_r)
 
     return {
         "unique_id": unique_id,

@@ -250,6 +250,7 @@ async function loadConfig() {
 function applyConfigToForm(cfg) {
   setVal("cfgPort",         cfg.port);
   setVal("cfgLang",         cfg.target_lang);
+  setVal("cfgTransMode",    cfg.transcription_mode || "instant");
   setVal("cfgSampleRate",   cfg.input_sample_rate);
   setVal("cfgChannels",     cfg.input_channels);
   setVal("cfgSampleWidth",  cfg.input_sample_width);
@@ -275,7 +276,7 @@ function gatherConfig() {
   return {
     port:                     parseInt(getVal("cfgPort")) || 9092,
     target_lang:              getVal("cfgLang") || "en",
-    voice_type:               getVal("cfgVoice") || "M",
+    transcription_mode:       getVal("cfgTransMode") || "instant",
     input_sample_rate:        parseInt(getVal("cfgSampleRate")) || 8000,
     input_channels:           parseInt(getVal("cfgChannels")) || 1,
     input_sample_width:       parseInt(getVal("cfgSampleWidth")) || 2,

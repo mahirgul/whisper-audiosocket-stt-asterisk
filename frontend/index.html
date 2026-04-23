@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stereo Dubbing Pro - V2</title>
-    <meta name="description" content="AI-powered stereo audio dubbing: transcribe, translate, and synthesize voiceovers with independent channel control.">
+    <title>Stereo Transcribe & Translate Pro - V2</title>
+    <meta name="description" content="AI-powered stereo audio transcription and translation with independent channel control.">
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800;900&display=swap" rel="stylesheet">
@@ -21,13 +21,13 @@
         <a href="https://mhrgl.com" target="_blank" class="topbar-brand">
             <div class="brand-icon">🎙</div>
             <div>
-                <div class="brand-name">Stereo Dubbing Pro</div>
+                <div class="brand-name">Stereo Transcribe</div>
                 <div class="brand-sub">mhrgl.com &middot; V2</div>
             </div>
         </a>
         <div class="topbar-divider"></div>
         <div class="topbar-nav">
-            <a href="/" class="active"><span class="nav-icon">🎛</span> Dubbing Studio</a>
+            <a href="/" class="active"><span class="nav-icon">🎛</span> Transcription Studio</a>
             <a href="/audiosocket.html"><span class="nav-icon">📡</span> AudioSocket</a>
         </div>
     </nav>
@@ -53,25 +53,19 @@
                 </div>
             </div>
 
-            <!-- Dubbing studio card -->
+            <!-- Transcription studio card -->
             <div class="main-card card">
                 <div class="card-header">
-                    🎛 Dubbing Studio
+                    🎛 Transcription Studio
                 </div>
                 <div id="setupArea">
-                    <div class="tabs">
-                        <button class="tab-btn active" onclick="switchTab('file')">FILE UPLOAD</button>
-                        <button class="tab-btn" onclick="switchTab('text')">TEXT TO DUB</button>
-                    </div>
-
-                    <!-- Options row -->
                     <div class="options-row">
                         <div class="form-group">
-                            <label>TARGET LANGUAGE</label>
+                            <label>TARGET LANGUAGE FOR TRANSLATION</label>
                             <select id="targetLang">
-                                <option value="de">German</option>
-                                <option value="en">English</option>
                                 <option value="tr">Turkish</option>
+                                <option value="en" selected>English</option>
+                                <option value="de">German</option>
                                 <option value="fr">French</option>
                                 <option value="es">Spanish</option>
                                 <option value="it">Italian</option>
@@ -84,41 +78,13 @@
                                 <option value="hi">Hindi</option>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label>SYNC MODE</label>
-                            <select id="syncMode">
-                                <option value="independent">Independent Channels</option>
-                                <option value="original">Original (Allow Overlap)</option>
-                                <option value="unified">Unified Timeline</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>VOICE</label>
-                            <select id="voiceType">
-                                <option value="M">Default Male</option>
-                                <option value="F">Default Female</option>
-                                <option value="auto">Auto-Detect</option>
-                                <optgroup label="All Available Voices" id="voiceGroup"></optgroup>
-                            </select>
-                        </div>
-                        <div class="form-group asterisk-check">
-                            <label for="asteriskFormat">ASTERISK (8KHz WAV)</label>
-                            <input type="checkbox" id="asteriskFormat">
-                        </div>
                     </div>
 
-                    <!-- File tab -->
                     <div id="fileTab" class="tab-content active">
                         <div id="uploadArea" class="drop-zone" onclick="document.getElementById('f').click()">
                             <div id="fL">Drop Stereo Audio or Click to Upload</div>
                             <input type="file" id="f" accept="audio/*" onchange="start()" style="display:none">
                         </div>
-                    </div>
-
-                    <!-- Text tab -->
-                    <div id="textTab" class="tab-content">
-                        <textarea id="inputText" placeholder="Enter text here to translate and dub into stereo audio..."></textarea>
-                        <button class="btn" onclick="startText()" style="width:100%;">GENERATE STEREO DUB FROM TEXT</button>
                     </div>
                 </div>
 
@@ -167,16 +133,25 @@
 
                 <div id="historyList"></div>
                 <div id="pagination" class="pagination"></div>
+</div>
 
-                <div style="text-align:center; margin-top:18px; padding-top:14px; border-top:1px solid var(--border);">
-                    <a href="https://mhrgl.com" target="_blank" style="font-size:0.6rem; color:#94a3b8; text-decoration:none; font-weight:800; letter-spacing:0.5px;">
-                        POWERED BY MHRGL.COM
-                    </a>
-                </div>
-            </div>
+</div><!-- /.left-panel -->
+
+</div><!-- /.container -->
+
+<footer>
+    <div class="footer-content">
+        <div class="footer-brand">
+            <span class="footer-icon">🎙</span>
+            <span>Stereo Transcribe Pro</span>
         </div>
-
-    </div><!-- /.container -->
-
+        <div class="footer-links">
+            <a href="https://mhrgl.com" target="_blank">© 2026 MHRGL.COM</a>
+            <span class="footer-sep"></span>
+            <a href="https://mhrgl.com" target="_blank">Support</a>
+        </div>
+    </div>
+</footer>
 </body>
 </html>
+

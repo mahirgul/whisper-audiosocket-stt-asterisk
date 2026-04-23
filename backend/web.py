@@ -87,10 +87,30 @@ async def transcribe(file: UploadFile = File(...), target_lang: str = Form("en")
     os.close(fd)
     try:
         with open(tmp_path, "wb") as f: f.write(await file.read())
+        
+        # Save original file to outputs for playback
+        out_wav = os.path.join(OUTPUT_DIR, f"{job_id}.wav")
+        shutil.copy2(tmp_path, out_wav)
+        audio_url = f"/outputs/{job_id}.wav"
+
         results = await processor.transcribe_audio(tmp_path, target_lang, output_dir=OUTPUT_DIR)
-        job_store[job_id] = {**results, "lang": target_lang}
+        
+        # Save metadata for history
+        meta = {
+            "job_id": job_id,
+            "audio_url": audio_url,
+            "lang": target_lang,
+            "orig_l": results["orig_l_srt"], "orig_r": results["orig_r_srt"],
+            "tran_l": results["tran_l_srt"], "tran_r": results["tran_r_srt"],
+            "time": time.time()
+        }
+        with open(os.path.join(OUTPUT_DIR, f"{job_id}.json"), "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+
+        job_store[job_id] = meta
         return {
             "job_id": job_id,
+            "audio_url": audio_url,
             "orig_l": results["orig_l_srt"], "orig_r": results["orig_r_srt"],
             "tran_l": results["tran_l_srt"], "tran_r": results["tran_r_srt"]
         }
@@ -101,6 +121,56 @@ async def transcribe(file: UploadFile = File(...), target_lang: str = Form("en")
     finally:
         processor.model_status = "idle"
         if os.path.exists(tmp_path): os.unlink(tmp_path)
+
+@app.get("/history")
+async def get_history(page: int = 1, limit: int = 20):
+    items = []
+    for fn in os.listdir(OUTPUT_DIR):
+        if fn.endswith(".json"):
+            try:
+                with open(os.path.join(OUTPUT_DIR, fn), "r", encoding="utf-8") as f:
+                    meta = json.load(f)
+                    items.append({
+                        "name": fn.replace(".json", ""),
+                        "time": meta.get("time", os.path.getmtime(os.path.join(OUTPUT_DIR, fn))),
+                        "url": meta.get("audio_url"),
+                        "meta": meta
+                    })
+            except: pass
+    
+    items.sort(key=lambda x: x["time"], reverse=True)
+    start = (page - 1) * limit
+    end = start + limit
+    return {
+        "items": items[start:end],
+        "total": len(items),
+        "page": page,
+        "pages": max(1, (len(items) + limit - 1) // limit)
+    }
+
+@app.delete("/delete/{job_id}")
+async def delete_job(job_id: str):
+    for ext in [".json", ".wav"]:
+        p = os.path.join(OUTPUT_DIR, job_id + ext)
+        if os.path.exists(p): os.unlink(p)
+    return {"status": "deleted"}
+
+@app.delete("/delete-multiple")
+async def delete_multiple(job_ids: list[str]):
+    for job_id in job_ids:
+        for ext in [".json", ".wav"]:
+            p = os.path.join(OUTPUT_DIR, job_id + ext)
+            if os.path.exists(p): os.unlink(p)
+    return {"status": "deleted"}
+
+@app.get("/download/{job_id}")
+async def download_bundle(job_id: str):
+    # Just a simple redirect or direct file serve for now
+    # In a full version, we could zip SRTs + WAV here
+    p = os.path.join(OUTPUT_DIR, job_id + ".wav")
+    if not os.path.exists(p): raise HTTPException(status_code=404)
+    from fastapi.responses import FileResponse
+    return FileResponse(p, filename=f"{job_id}.wav")
 
 # ---------------------------------------------------------------------------
 # AudioSocket routes
@@ -226,22 +296,20 @@ async def as_sse_stream():
     """
     async def event_generator():
         yield "data: {\"event\": \"connected\"}\n\n"
+        last_ping = time.time()
         while True:
             event = as_srv.get_event()
             if event is not None:
                 payload = json.dumps({"event": event["event"], "data": event["data"]})
                 yield f"data: {payload}\n\n"
             else:
-                # No event — send keep-alive ping after a short sleep
-                await asyncio.sleep(0.1)
-                # Check again before sending ping
-                event = as_srv.get_event()
-                if event is not None:
-                    payload = json.dumps({"event": event["event"], "data": event["data"]})
-                    yield f"data: {payload}\n\n"
-                else:
+                # No event — check if it's time to send a keep-alive ping (every 15s)
+                now = time.time()
+                if now - last_ping > 15:
                     yield ": ping\n\n"
-                    await asyncio.sleep(1.0)
+                    last_ping = now
+                
+                await asyncio.sleep(0.2)  # Balanced sleep to avoid busy-loop
 
     return StreamingResponse(
         event_generator(),
@@ -259,7 +327,7 @@ async def as_sse_stream():
 
 app.mount("/outputs", StaticFiles(directory=OUTPUT_DIR), name="outputs")
 app.mount("/audiosocket-files", StaticFiles(directory=AUDIOSOCKET_DIR), name="audiosocket_files")
-app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
+app.mount("/", StaticFiles(directory=os.path.join(BASE_DIR, "frontend"), html=True), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn

@@ -6,7 +6,6 @@ openai-whisper
 torch
 torchaudio
 jinja2
-deep-translator
 argostranslate
 numpy
 psutil

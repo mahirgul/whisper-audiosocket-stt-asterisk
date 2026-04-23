@@ -85,7 +85,7 @@ if %errorlevel% neq 0 (
 
 echo.
 echo   Installing argostranslate (required for Python 3.13+)...
-pip install aargostranslate
+pip install argostranslate
 if %errorlevel% neq 0 (
     echo   WARNING: argostranslate could not be installed. May not be needed for your Python version.
 )

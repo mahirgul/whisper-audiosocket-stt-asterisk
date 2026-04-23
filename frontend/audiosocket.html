@@ -4,9 +4,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AudioSocket Monitor — Stereo Dubbing Pro V2</title>
+  <title>AudioSocket Monitor — Stereo Transcribe Pro V2</title>
   <meta name="description"
-    content="Real-time Asterisk AudioSocket monitor: live connections, transcription, translation, and dubbed audio history.">
+    content="Real-time Asterisk AudioSocket monitor: live connections, transcription and offline translation.">
   <link rel="icon" href="/favicon.ico" type="image/x-icon">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800;900&display=swap" rel="stylesheet">
@@ -22,13 +22,13 @@
     <a href="https://mhrgl.com" target="_blank" class="topbar-brand">
       <div class="brand-icon">🎙</div>
       <div>
-        <div class="brand-name">Stereo Dubbing Pro</div>
+        <div class="brand-name">Stereo Transcribe</div>
         <div class="brand-sub">mhrgl.com &middot; V2</div>
       </div>
     </a>
     <div class="topbar-divider"></div>
     <div class="topbar-nav">
-      <a href="/"><span class="nav-icon">🎛</span> Dubbing Studio</a>
+      <a href="/"><span class="nav-icon">🎛</span> Transcription Studio</a>
       <a href="/audiosocket.html" class="active"><span class="nav-icon">📡</span> AudioSocket</a>
     </div>
     <div class="topbar-right">
@@ -75,6 +75,13 @@
                   <option value="hi">Hindi</option>
                 </select>
               </div>
+              <div class="form-group">
+                <label>Transcription Mode</label>
+                <select id="cfgTransMode">
+                  <option value="instant">Instant (Real-time)</option>
+                  <option value="on_close">On Close (Full audio)</option>
+                </select>
+              </div>
             </div>
 
             <div
@@ -83,7 +90,7 @@
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label>Sample Rate (Hz) <span style="font-size:0.6rem;font-weight:normal;color:#94a3b8;">(If slow, try 16000 or 48000)</span></label>
+                <label>Sample Rate (Hz)</label>
                 <input id="cfgSampleRate" type="number" value="16000">
               </div>
               <div class="form-group">
@@ -229,7 +236,19 @@
 
   </div><!-- /.as-layout -->
 
-  <!-- Toast notification (injected by JS) -->
+  <footer>
+    <div class="footer-content">
+      <div class="footer-brand">
+        <span class="footer-icon">🎙</span>
+        <span>Stereo Transcribe Pro</span>
+      </div>
+      <div class="footer-links">
+        <a href="https://mhrgl.com" target="_blank">© 2026 MHRGL.COM</a>
+        <span class="footer-sep"></span>
+        <a href="https://mhrgl.com" target="_blank">Support</a>
+      </div>
+    </div>
+  </footer>
 
 </body>
 

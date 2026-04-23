@@ -19,9 +19,15 @@ import queue
 import struct
 import sys
 import threading
+import time
 import traceback
 import uuid as _uuid
 from datetime import datetime, timezone
+import wave
+
+import audiosocket_processor
+import model_manager
+import local_translator
 
 # ---------------------------------------------------------------------------
 # Global state — thread-safe
@@ -39,6 +45,10 @@ _connections_lock = threading.Lock()
 
 # Thread-safe queue: AS thread puts events, FastAPI thread reads them
 _event_queue: queue.Queue = queue.Queue()
+
+# Session processing queue — serializes heavy transcription work
+_processing_queue: queue.Queue = queue.Queue()
+_processing_worker_thread: threading.Thread | None = None
 
 _BASE_DIR: str = ""
 
@@ -115,14 +125,24 @@ def load_config(config_path: str) -> dict:
 
 def start_server(config_path: str) -> None:
     """Start (or restart) the AudioSocket TCP server in a dedicated thread."""
-    global _thread, _loop, _config
+    global _thread, _loop, _config, _processing_worker_thread
 
-    # Stop existing server if running
+    # Stop existing server and worker if running
     stop_server()
 
     with _config_lock:
         _config = load_config(config_path)
         port = _config.get("port", 9092)
+
+    # Start session processing worker (serializes transcription jobs)
+    # Ensure we don't start multiple workers
+    if _processing_worker_thread is None or not _processing_worker_thread.is_alive():
+        _processing_worker_thread = threading.Thread(
+            target=_session_processing_worker,
+            daemon=True,
+            name="AS-SessionQueue"
+        )
+        _processing_worker_thread.start()
 
     _loop = asyncio.new_event_loop()
 
@@ -137,7 +157,14 @@ def start_server(config_path: str) -> None:
 
 
 def stop_server() -> None:
-    global _server, _thread, _loop
+    global _server, _thread, _loop, _processing_worker_thread
+    
+    # Shutdown processing queue and wait for worker
+    if _processing_worker_thread and _processing_worker_thread.is_alive():
+        _processing_queue.put(None)
+        _processing_worker_thread.join(timeout=2)
+    _processing_worker_thread = None
+
     if _loop is not None and _server is not None:
         try:
             asyncio.run_coroutine_threadsafe(_stop_tcp(), _loop).result(timeout=5)
@@ -150,6 +177,35 @@ def stop_server() -> None:
     _server = None
     _thread = None
     _loop = None
+
+
+def _session_processing_worker() -> None:
+    """
+    Single worker thread that drains the session processing queue.
+    Ensures only one session is transcribed at a time, preventing
+    model contention when multiple AudioSocket connections overlap.
+    """
+    print("[AudioSocket] Session processing queue started.")
+    while True:
+        try:
+            job = _processing_queue.get(timeout=1.0)
+            if job is None:
+                break  # shutdown signal
+            session_id, pcm_data, out_dir, duration_s = job
+            print(f"[AudioSocket] Processing session {session_id[:8]} "
+                  f"(queue size: {_processing_queue.qsize()} remaining)")
+            
+            # Update status from queued to processing
+            with _connections_lock:
+                if session_id in _active_connections:
+                    _active_connections[session_id]["status"] = "processing"
+
+            _process_session_blocking(session_id, pcm_data, out_dir, duration_s)
+            _processing_queue.task_done()
+        except queue.Empty:
+            continue
+        except Exception:
+            traceback.print_exc()
 
 
 # ---------------------------------------------------------------------------
@@ -178,8 +234,23 @@ async def _stop_tcp() -> None:
 # Connection handler (runs inside the AS thread)
 # ---------------------------------------------------------------------------
 
-async def _connection_handler(reader: asyncio.StreamReader,
-                               writer: asyncio.StreamWriter) -> None:
+def _is_silent_frame(payload: bytes, threshold: int = 300) -> bool:
+    """
+    Check silence by RMS energy of the PCM frame.
+    threshold: RMS amplitude value below which frame is considered silent.
+    Tune this value based on your environment (300-500 is good for 8kHz slin).
+    """
+    if len(payload) < 2:
+        return True
+    # Assume 16-bit PCM (2 bytes per sample)
+    count = len(payload) // 2
+    samples = struct.unpack(f"<{count}h", payload)
+    rms = (sum(s * s for s in samples) / count) ** 0.5
+    return rms < threshold
+
+
+async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+
     remote = writer.get_extra_info("peername")
     session_id = None
     start_time = datetime.now(timezone.utc)
@@ -224,12 +295,23 @@ async def _connection_handler(reader: asyncio.StreamReader,
         audio_buf = bytearray()
         connection_alive = True
 
-        # Build a silence frame to send back to Asterisk
+        # VAD state for instant transcription
         with _config_lock:
-            sample_rate = _config.get("input_sample_rate", 8000)
-            channels = _config.get("input_channels", 1)
-            sample_width = _config.get("input_sample_width", 2)
+            cfg = dict(_config)
+            trans_mode = cfg.get("transcription_mode", "on_close")
+            silence_ms = cfg.get("vad_silence_threshold_ms", 1500)
+            min_chunk_ms = cfg.get("vad_min_chunk_ms", 1000)
+            sample_rate = cfg.get("input_sample_rate", 8000)
+            channels = cfg.get("input_channels", 1)
+            sample_width = cfg.get("input_sample_width", 2)
 
+        chunk_buf = bytearray()
+        silence_bytes_threshold = (sample_rate * channels * sample_width * silence_ms) // 1000
+        min_chunk_bytes = (sample_rate * channels * sample_width * min_chunk_ms) // 1000
+        consecutive_silence = 0
+        chunk_counter = 0
+
+        # Build a silence frame to send back to Asterisk
         silence_frame_ms = 20
         silence_frame_bytes = (sample_rate * channels * sample_width * silence_frame_ms) // 1000
         silence_payload = b'\x00' * silence_frame_bytes
@@ -247,7 +329,7 @@ async def _connection_handler(reader: asyncio.StreamReader,
                 connection_alive = False
 
         async def _read_audio():
-            nonlocal connection_alive
+            nonlocal connection_alive, consecutive_silence, chunk_counter
             try:
                 while connection_alive:
                     frame_type, payload = await _read_frame(reader)
@@ -255,6 +337,31 @@ async def _connection_handler(reader: asyncio.StreamReader,
                         break
                     if frame_type == FRAME_AUDIO:
                         audio_buf.extend(payload)
+
+                        if trans_mode == "instant":
+                            chunk_buf.extend(payload)
+                            
+                            # RMS-based VAD for real-world audio
+                            is_silent = _is_silent_frame(payload)
+                            
+                            if is_silent:
+                                consecutive_silence += len(payload)
+                            else:
+                                # Soft reset: reduce counter instead of zeroing out immediately
+                                consecutive_silence = max(0, consecutive_silence - len(payload) // 2)
+
+                            if consecutive_silence >= silence_bytes_threshold and len(chunk_buf) >= min_chunk_bytes:
+                                # Chunk ended! Transcribe this segment.
+                                chunk_counter += 1
+                                current_chunk = bytes(chunk_buf)
+                                chunk_buf.clear()
+                                consecutive_silence = 0
+                                
+                                # Process in background task so we don't block the stream
+                                asyncio.create_task(audiosocket_processor.process_chunk(
+                                    session_id, chunk_counter, current_chunk, cfg, out_dir, _emit_async
+                                ))
+
             except (asyncio.IncompleteReadError, ConnectionResetError, OSError):
                 pass
             finally:
@@ -269,12 +376,19 @@ async def _connection_handler(reader: asyncio.StreamReader,
         except asyncio.CancelledError:
             pass
 
+        # Final chunk for instant mode if buffer not empty
+        if trans_mode == "instant" and len(chunk_buf) > (sample_rate * channels * sample_width * 0.1):
+            chunk_counter += 1
+            asyncio.create_task(audiosocket_processor.process_chunk(
+                session_id, chunk_counter, bytes(chunk_buf), cfg, out_dir, _emit_async
+            ))
+
         # Connection ended
         duration_s = (datetime.now(timezone.utc) - start_time).total_seconds()
         print(f"[AudioSocket] Connection ended — session {session_id}, "
               f"{len(audio_buf)} bytes, {round(duration_s, 1)}s")
 
-        if len(audio_buf) > 0:
+        if trans_mode == "on_close" and len(audio_buf) > 0:
             with _connections_lock:
                 if session_id in _active_connections:
                     _active_connections[session_id]["status"] = "processing"
@@ -286,24 +400,35 @@ async def _connection_handler(reader: asyncio.StreamReader,
                 "status": "processing"
             })
 
-            # Process in a background thread so this handler can finish.
-            # The processing thread owns the _active_connections cleanup.
-            threading.Thread(
-                target=_process_session_blocking,
-                args=(session_id, bytes(audio_buf), out_dir, duration_s),
-                daemon=True,
-                name=f"AS-Process-{session_id[:8]}"
-            ).start()
+            # Queue session for processing
+            queue_pos = _processing_queue.qsize() + 1
+            print(f"[AudioSocket] Session {session_id[:8]} queued for processing "
+                  f"(position: {queue_pos})")
+
+            # Update status to show it's queued, not just processing
+            with _connections_lock:
+                if session_id in _active_connections:
+                    _active_connections[session_id]["status"] = "queued"
+
+            _emit_sync("session_queued", {
+                "uuid": session_id,
+                "queue_position": queue_pos,
+                "duration_s": round(duration_s, 1)
+            })
+
+            _processing_queue.put((session_id, bytes(audio_buf), out_dir, duration_s))
             processing_started = True
         else:
+            # If instant mode, we don't spawn a session process thread, 
+            # cleanup is done when connection closes.
             with _connections_lock:
                 _active_connections.pop(session_id, None)
             _save_session_meta_sync(session_id, out_dir, "completed",
-                                    total_chunks=0,
+                                    total_chunks=chunk_counter,
                                     duration_s=round(duration_s, 1))
             _emit_sync("connection_close", {
                 "uuid": session_id,
-                "total_chunks": 0,
+                "total_chunks": chunk_counter,
                 "duration_s": round(duration_s, 1)
             })
 
@@ -373,9 +498,6 @@ async def _read_uuid_frame(reader: asyncio.StreamReader) -> str | None:
     return None
 
 
-import wave
-import model_manager
-
 def _save_wav(path: str, pcm_data: bytes, sample_rate: int,
               channels: int, sample_width: int) -> None:
     """Save raw PCM bytes as a WAV file."""
@@ -388,11 +510,10 @@ def _save_wav(path: str, pcm_data: bytes, sample_rate: int,
 
 def _to_srt(segments: list, tag: str = "") -> str:
     """Convert whisper-style segment list to SRT string."""
-    import time as _time
     srt = []
     for i, s in enumerate(segments):
         def ts(x):
-            return f"{_time.strftime('%H:%M:%S', _time.gmtime(x))},{int((x % 1) * 1000):03d}"
+            return f"{time.strftime('%H:%M:%S', time.gmtime(x))},{int((x % 1) * 1000):03d}"
         txt = s["text"].strip()
         srt.append(f"{i+1}\n{ts(s['start'])} --> {ts(s['end'])}\n[{tag}] {txt}\n")
     return "\n".join(srt)
@@ -400,7 +521,6 @@ def _to_srt(segments: list, tag: str = "") -> str:
 
 def _process_session_blocking(session_id: str, pcm_data: bytes,
                                out_dir: str, duration_s: float) -> None:
-    processing_ok = False
     """
     Process a completed AudioSocket session:
       1. Save WAV from raw PCM
@@ -412,6 +532,7 @@ def _process_session_blocking(session_id: str, pcm_data: bytes,
     dedicated model worker process via model_manager.transcribe(),
     so there is NO GIL contention with the web server.
     """
+    processing_ok = False
     try:
         with _config_lock:
             cfg = dict(_config)
@@ -449,8 +570,6 @@ def _process_session_blocking(session_id: str, pcm_data: bytes,
         })
 
         # 3. Translate (offline — local_translator uses argostranslate)
-        import local_translator
-
         translated_segments = []
         if segments and target_lang and detected_lang != target_lang:
             print(f"[AudioSocket] Translating {detected_lang}→{target_lang} "
@@ -480,14 +599,13 @@ def _process_session_blocking(session_id: str, pcm_data: bytes,
             f.write(_to_srt(translated_segments, "TRAN"))
 
         # 5. Write result metadata
-        from datetime import datetime as _dt
         result_path = os.path.join(out_dir, "result.json")
         with open(result_path, "w", encoding="utf-8") as f:
             json.dump({
                 "status": "completed",
                 "orig_text": orig_text,
                 "tran_text": tran_text,
-                "completed": _dt.now(timezone.utc).isoformat()
+                "completed": datetime.now(timezone.utc).isoformat()
             }, f, ensure_ascii=False, indent=2)
 
         _emit_sync("session_processed", {

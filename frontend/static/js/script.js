@@ -1,38 +1,5 @@
 let ws, audioCtx, audioEl, sourceNode, splitter, merger, leftGain, rightGain;
-let currentPage = 1, historyItems = [], allVoices = [];
-
-async function updateVoiceList() {
-    const lang = document.getElementById('targetLang').value;
-    const group = document.getElementById('voiceGroup');
-    group.innerHTML = '';
-    
-    if (allVoices.length === 0) {
-        try {
-            const r = await fetch('/voices');
-            allVoices = await r.json();
-        } catch(e) { return; }
-    }
-
-    const filtered = allVoices.filter(v => v.Locale.startsWith(lang));
-    filtered.forEach(v => {
-        const opt = document.createElement('option');
-        opt.value = v.ShortName;
-        opt.innerText = `${v.FriendlyName.replace('Microsoft ', '').replace(' Online (Natural)', '')} (${v.Gender})`;
-        group.appendChild(opt);
-    });
-}
-
-function switchTab(tab) {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    if (tab === 'file') {
-        document.querySelector('.tab-btn:nth-child(1)').classList.add('active');
-        document.getElementById('fileTab').classList.add('active');
-    } else {
-        document.querySelector('.tab-btn:nth-child(2)').classList.add('active');
-        document.getElementById('textTab').classList.add('active');
-    }
-}
+let currentPage = 1, historyItems = [];
 
 // Stats Interval
 setInterval(async () => {
@@ -82,12 +49,10 @@ function initWavesurfer(url) {
     setupAudioEngine();
     if (ws) ws.destroy();
     
-    // Reset audio element
     audioEl.pause();
     audioEl.src = url;
     audioEl.load(); 
 
-    // Small timeout to ensure the container is visible and has dimensions
     setTimeout(() => {
         ws = WaveSurfer.create({
             container: '#waveform',
@@ -98,10 +63,6 @@ function initWavesurfer(url) {
             height: 80,
             splitChannels: true,
             normalize: true
-        });
-
-        ws.on('ready', () => {
-            console.log('WaveSurfer ready');
         });
 
         document.getElementById('playPause').onclick = () => {
@@ -137,7 +98,7 @@ async function loadHistory(page = 1) {
                     <strong style="word-break:break-all; display:block; margin-bottom:2px;">${item.name}</strong>
                     <span class="time">${new Date(item.time * 1000).toLocaleString()}</span>
                     <div style="display:flex; gap:6px; margin-top:10px;">
-                        <a href="/download/${item.name}" onclick="event.stopPropagation()" class="download-link" style="padding:4px 10px;">ZIP</a>
+                        <a href="/download/${item.name}" onclick="event.stopPropagation()" class="download-link" style="padding:4px 10px;">WAV</a>
                         <span onclick="deleteFromHistory('${item.name}', event)" class="download-link" style="padding:4px 10px; color:#ef4444; border-color:#fee2e2;">DEL</span>
                     </div>
                 </div>
@@ -182,12 +143,11 @@ async function deleteSelected() {
 
     const filenames = Array.from(checked).map(cb => cb.value);
     try {
-        const res = await fetch('/delete-multiple', {
+        await fetch('/delete-multiple', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(filenames)
         });
-        await res.json();
         loadHistory(currentPage);
         resetUI();
     } catch(e) { alert("Failed to delete items"); }
@@ -232,17 +192,8 @@ async function start() {
     handleProcessing('/transcribe', { file });
 }
 
-async function startText() {
-    const text = document.getElementById('inputText').value.trim();
-    if(!text) { alert("Please enter text"); return; }
-    handleProcessing('/process-text', { text });
-}
-
 async function handleProcessing(endpoint, payload) {
     const lang = document.getElementById('targetLang').value;
-    const sync = document.getElementById('syncMode').value;
-    const voice = document.getElementById('voiceType').value;
-    const asterisk = document.getElementById('asteriskFormat').checked;
     
     document.getElementById('setupArea').style.display = 'none';
     document.getElementById('resultsGrid').style.display = 'none';
@@ -271,25 +222,16 @@ async function handleProcessing(endpoint, payload) {
         document.getElementById('boxTR').innerText = data.tran_r;
         document.getElementById('resultsGrid').style.display = 'grid';
 
-        bar.innerText = "Generating Stereo Audio...";
-        const fdSync = new FormData(); 
-        fdSync.append('sync_mode', sync);
-        fdSync.append('voice_type', voice);
-        fdSync.append('asterisk', asterisk);
-        
-        const res2 = await fetch(`/synthesize/${data.job_id}`, { method: 'POST', body: fdSync });
-        const data2 = await res2.json();
-        
-        if (data2.audio_url) {
-            const finalUrl = data2.audio_url + "?t=" + Date.now();
-            initWavesurfer(finalUrl);
-            document.getElementById('playingLabel').innerText = data2.audio_url.split('/').pop();
+        if (data.audio_url) {
+            initWavesurfer(data.audio_url + "?t=" + Date.now());
+            document.getElementById('playingLabel').innerText = data.audio_url.split('/').pop();
             document.getElementById('playerCard').style.display = 'block';
             document.getElementById('btnNew').style.display = 'block';
             bar.style.display = 'none';
             await loadHistory(1); 
         } else {
-            throw new Error(data2.detail || "Failed");
+            bar.style.display = 'none';
+            document.getElementById('btnNew').style.display = 'block';
         }
     } catch(e) {
         alert("ERROR: " + e.message);
@@ -299,10 +241,5 @@ async function handleProcessing(endpoint, payload) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    const targetLang = document.getElementById('targetLang');
-    if (targetLang) {
-        targetLang.addEventListener('change', updateVoiceList);
-        updateVoiceList();
-    }
     loadHistory(1);
 });

@@ -111,9 +111,6 @@ async def process_chunk(
         save_wav(wav_path, pcm_data, sample_rate, channels, sample_width)
 
         # 2. Transcribe
-        if not model_manager.is_ready():
-            raise RuntimeError("Whisper model not loaded yet.")
-
         await event_cb("chunk_received", {
             "uuid": session_id, "chunk_idx": chunk_idx,
             "duration_ms": int(len(pcm_data) / (sample_rate * channels * sample_width) * 1000)

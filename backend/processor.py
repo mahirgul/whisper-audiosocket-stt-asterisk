@@ -45,8 +45,8 @@ def process_segments_with_music(segments, min_gap=3.0):
 
 
 async def transcribe_audio(file_path, target_lang, output_dir="outputs"):
-    if not model_manager.is_ready():
-        raise Exception("AI Model is still loading.")
+    if model_manager.model_status == "loading":
+        raise Exception("AI Model is still loading. Please wait a moment...")
 
     unique_id = str(uuid.uuid4())[:8]
     audio = AudioSegment.from_file(file_path)

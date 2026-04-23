@@ -50,7 +50,7 @@ if %errorlevel% neq 0 (
 :: ------------------------------------------------------------
 echo.
 echo [3/5] Setting up virtual environment (venv)...
-if exist "venv\Scripts\activate.ps1" (
+if exist "venv\Scripts\activate.bat" (
     echo   Existing venv found, skipping creation.
 ) else (
     python -m venv venv
@@ -67,7 +67,7 @@ if exist "venv\Scripts\activate.ps1" (
 :: ------------------------------------------------------------
 echo.
 echo [4/5] Installing dependencies from requirements.txt...
-call venv\Scripts\activate.ps1
+call venv\Scripts\activate.bat
 pip install --upgrade pip >nul
 pip install -r requirements.txt
 if %errorlevel% neq 0 (

@@ -43,8 +43,9 @@ _config_lock = threading.Lock()
 _active_connections: dict[str, dict] = {}          # uuid → session meta
 _connections_lock = threading.Lock()
 
-# Thread-safe queue: AS thread puts events, FastAPI thread reads them
-_event_queue: queue.Queue = queue.Queue()
+# Thread-safe queues for SSE clients (FastAPI reads them)
+_event_queues: set[queue.Queue] = set()
+_event_queues_lock = threading.Lock()
 
 # Session processing queue — serializes heavy transcription work
 _processing_queue: queue.Queue = queue.Queue()
@@ -87,11 +88,29 @@ def get_active_connections() -> dict:
 
 
 def get_event() -> dict | None:
-    """Non-blocking get from the thread-safe event queue. Returns None if empty."""
-    try:
-        return _event_queue.get_nowait()
-    except queue.Empty:
-        return None
+    """
+    OBSOLETE: Prefer subscribe() for real-time SSE.
+    Remains for backward compatibility if needed.
+    """
+    return None
+
+
+def subscribe() -> queue.Queue:
+    """
+    Create a new thread-safe queue for a client to receive events.
+    Returns the queue instance.
+    """
+    q = queue.Queue()
+    with _event_queues_lock:
+        _event_queues.add(q)
+    return q
+
+
+def unsubscribe(q: queue.Queue) -> None:
+    """Remove a client queue from the active event set."""
+    with _event_queues_lock:
+        if q in _event_queues:
+            _event_queues.remove(q)
 
 
 def load_config(config_path: str) -> dict:
@@ -127,7 +146,7 @@ def start_server(config_path: str) -> None:
     """Start (or restart) the AudioSocket TCP server in a dedicated thread."""
     global _thread, _loop, _config, _processing_worker_thread
 
-    # Stop existing server and worker if running
+    # Stop existing server if running
     stop_server()
 
     with _config_lock:
@@ -135,7 +154,7 @@ def start_server(config_path: str) -> None:
         port = _config.get("port", 9092)
 
     # Start session processing worker (serializes transcription jobs)
-    # Ensure we don't start multiple workers
+    # This thread stays alive even if the TCP server restarts due to config changes.
     if _processing_worker_thread is None or not _processing_worker_thread.is_alive():
         _processing_worker_thread = threading.Thread(
             target=_session_processing_worker,
@@ -157,14 +176,7 @@ def start_server(config_path: str) -> None:
 
 
 def stop_server() -> None:
-    global _server, _thread, _loop, _processing_worker_thread
-    
-    # Shutdown processing queue and wait for worker
-    if _processing_worker_thread and _processing_worker_thread.is_alive():
-        _processing_queue.put(None)
-        _processing_worker_thread.join(timeout=2)
-    _processing_worker_thread = None
-
+    global _server, _thread, _loop
     if _loop is not None and _server is not None:
         try:
             asyncio.run_coroutine_threadsafe(_stop_tcp(), _loop).result(timeout=5)
@@ -177,6 +189,16 @@ def stop_server() -> None:
     _server = None
     _thread = None
     _loop = None
+
+
+def shutdown_worker() -> None:
+    """Shutdown the background processing queue worker."""
+    global _processing_worker_thread
+    if _processing_worker_thread and _processing_worker_thread.is_alive():
+        print("[AudioSocket] Shutting down session worker...")
+        _processing_queue.put(None)
+        _processing_worker_thread.join(timeout=2)
+    _processing_worker_thread = None
 
 
 def _session_processing_worker() -> None:
@@ -293,6 +315,7 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
         _save_session_meta_sync(session_id, out_dir, "active")
 
         audio_buf = bytearray()
+        total_bytes_received = 0
         connection_alive = True
 
         # VAD state for instant transcription
@@ -386,7 +409,7 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
         # Connection ended
         duration_s = (datetime.now(timezone.utc) - start_time).total_seconds()
         print(f"[AudioSocket] Connection ended — session {session_id}, "
-              f"{len(audio_buf)} bytes, {round(duration_s, 1)}s")
+              f"{total_bytes_received} bytes, {round(duration_s, 1)}s")
 
         if trans_mode == "on_close" and len(audio_buf) > 0:
             with _connections_lock:
@@ -633,8 +656,12 @@ def _process_session_blocking(session_id: str, pcm_data: bytes,
 # ---------------------------------------------------------------------------
 
 def _emit_sync(event_type: str, payload: dict) -> None:
-    """Thread-safe: push event to the queue (called from any thread)."""
-    _event_queue.put({"event": event_type, "data": payload})
+    """Thread-safe: push event to all subscribed queues."""
+    msg = {"event": event_type, "data": payload}
+    with _event_queues_lock:
+        # copy to a list to avoid issues if set changes during iteration, though lock should protect it
+        for q in list(_event_queues):
+            q.put(msg)
 
 
 async def _emit_async(event_type: str, payload: dict) -> None:
@@ -677,3 +704,4 @@ def _save_session_meta_sync(session_id: str, out_dir: str, status: str,
 
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(existing, f, ensure_ascii=False, indent=2)
+

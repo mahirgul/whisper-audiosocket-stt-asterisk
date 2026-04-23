@@ -14,6 +14,7 @@ import shutil
 import asyncio
 import sys
 import argparse
+import queue
 import processor
 import model_manager
 import audiosocket_server as as_srv
@@ -47,6 +48,7 @@ async def lifespan(app: FastAPI):
     as_srv.start_server(config_path)
     yield
     as_srv.stop_server()
+    as_srv.shutdown_worker()
     model_manager.stop()
 
 app = FastAPI(lifespan=lifespan)
@@ -295,21 +297,25 @@ async def as_sse_stream():
     Polls the thread-safe queue from the AudioSocket thread.
     """
     async def event_generator():
+        q = as_srv.subscribe()
         yield "data: {\"event\": \"connected\"}\n\n"
         last_ping = time.time()
-        while True:
-            event = as_srv.get_event()
-            if event is not None:
-                payload = json.dumps({"event": event["event"], "data": event["data"]})
-                yield f"data: {payload}\n\n"
-            else:
-                # No event — check if it's time to send a keep-alive ping (every 15s)
-                now = time.time()
-                if now - last_ping > 15:
-                    yield ": ping\n\n"
-                    last_ping = now
-                
-                await asyncio.sleep(0.2)  # Balanced sleep to avoid busy-loop
+        try:
+            while True:
+                try:
+                    event = q.get_nowait()
+                    payload = json.dumps({"event": event["event"], "data": event["data"]})
+                    yield f"data: {payload}\n\n"
+                except queue.Empty:
+                    # No event — check if it's time to send a keep-alive ping (every 15s)
+                    now = time.time()
+                    if now - last_ping > 15:
+                        yield ": ping\n\n"
+                        last_ping = now
+                    
+                    await asyncio.sleep(0.2)  # Balanced sleep to avoid busy-loop
+        finally:
+            as_srv.unsubscribe(q)
 
     return StreamingResponse(
         event_generator(),

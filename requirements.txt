@@ -11,3 +11,4 @@ numpy
 psutil
 aiohttp
 aiofiles
+audioop-lts

@@ -27,6 +27,8 @@ env/
 outputs/
 audiosocket/
 models/
+.wolf/
+.claude/
 
 # ── Logs ─────────────────────────────────────────────────────
 *.log

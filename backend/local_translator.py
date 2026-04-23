@@ -17,6 +17,8 @@ _PKG_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "models", "argostranslate"
 )
+os.environ["ARGOS_PACKAGES_DIR"] = _PKG_DIR
+os.environ["ARGOS_DEVICE_DATA_DIR"] = _PKG_DIR
 
 
 def _ensure_package(from_code: str, to_code: str) -> bool:

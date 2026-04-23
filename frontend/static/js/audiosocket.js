@@ -134,6 +134,10 @@ function handleSSEEvent(eventType, data) {
       loadHistory(historyPage);
       break;
 
+    case "debug_info":
+      // Just for logging in the live console
+      break;
+
     case "error":
       if (activeConnections[data.uuid]) {
         activeConnections[data.uuid].stage = `⚠ Error: ${data.message}`;
@@ -173,7 +177,9 @@ function appendLog(eventType, data) {
         ? ` — ${data.total_chunks} chunks, ${data.duration_s}s`
         : eventType === "session_queued"
           ? ` — Position: ${data.queue_position}`
-          : "";
+          : eventType === "debug_info"
+            ? ` — ${data.message}`
+            : "";
 
   const entry = document.createElement("div");
   entry.className = "log-entry";
@@ -260,7 +266,7 @@ async function loadConfig() {
 function applyConfigToForm(cfg) {
   setVal("cfgPort",         cfg.port);
   setVal("cfgLang",         cfg.target_lang);
-  setVal("cfgTransMode",    cfg.transcription_mode || "instant");
+  setVal("cfgTransMode",    "on_close");
   setVal("cfgSampleRate",   cfg.input_sample_rate);
   setVal("cfgChannels",     cfg.input_channels);
   setVal("cfgSampleWidth",  cfg.input_sample_width);

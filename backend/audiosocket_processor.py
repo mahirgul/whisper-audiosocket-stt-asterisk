@@ -13,6 +13,7 @@ import aiofiles
 import traceback
 import json
 import aiohttp
+import time as _time
 import local_translator
 
 import model_manager
@@ -50,13 +51,12 @@ def save_wav(path: str, pcm_data: bytes, sample_rate: int, channels: int,
 
 
 def to_srt(segments: list, tag: str = "") -> str:
-    import time as _time
     srt = []
     for i, s in enumerate(segments):
         def ts(x):
             return f"{_time.strftime('%H:%M:%S', _time.gmtime(x))},{int((x % 1) * 1000):03d}"
         txt = s["text"].strip()
-        srt.append(f"{i+1}\n{ts(s['start'])} --> {ts(s['end'])}\n[{tag}] {txt}\n")
+        srt.append(f"{i+1}\n{ts(s['start'])} --> {ts(s['end'])}\n{txt}\n")
     return "\n".join(srt)
 
 
@@ -110,13 +110,17 @@ async def deliver_chunk(wav_bytes: bytes, config: dict, session_id: str, chunk_i
 def deliver_chunk_sync(wav_bytes: bytes, config: dict, session_id: str, chunk_idx: int) -> int:
     """Synchronous wrapper for deliver_chunk (used in on_close mode)."""
     try:
+        # Create a new loop for the synchronous call in the background thread
         loop = asyncio.new_event_loop()
         return loop.run_until_complete(deliver_chunk(wav_bytes, config, session_id, chunk_idx))
     except Exception as e:
         print(f"[Delivery] Sync error: {e}")
         return 500
     finally:
-        loop.close()
+        try:
+            loop.close()
+        except Exception:
+            pass
 
 
 async def process_chunk(
@@ -201,9 +205,9 @@ async def process_chunk(
 
         # 4. Save SRT files
         async with aiofiles.open(orig_srt, "w", encoding="utf-8") as f:
-            await f.write(to_srt(segments, "ORIG"))
+            await f.write(to_srt(segments))
         async with aiofiles.open(tran_srt, "w", encoding="utf-8") as f:
-            await f.write(to_srt(translated_segments, "TRAN"))
+            await f.write(to_srt(translated_segments))
 
         # 5. REST Delivery
         status_code = await deliver_chunk(wav_bytes, config, session_id, chunk_idx)

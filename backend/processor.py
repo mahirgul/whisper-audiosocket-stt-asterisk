@@ -26,7 +26,7 @@ def to_srt(segments, tag=""):
     srt = []
     for i, s in enumerate(segments):
         txt = s['text'].strip()
-        srt.append(f"{i+1}\n{ts(s['start'])} --> {ts(s['end'])}\n[{tag}] {txt}\n")
+        srt.append(f"{i+1}\n{ts(s['start'])} --> {ts(s['end'])}\n{txt}\n")
     return "\n".join(srt)
 
 def process_segments_with_music(segments, min_gap=3.0):
@@ -94,8 +94,8 @@ async def transcribe_audio(file_path, target_lang, output_dir="outputs"):
         "unique_id": unique_id,
         "is_mono": original_channels == 1,
         "t_l": t_l, "t_r": t_r,
-        "orig_l_srt": to_srt(segs_l, "ORIG-L"), "orig_r_srt": to_srt(segs_r, "ORIG-R"),
-        "tran_l_srt": to_srt(t_l, "TRAN-L"), "tran_r_srt": to_srt(t_r, "TRAN-R"),
+        "orig_l_srt": to_srt(segs_l), "orig_r_srt": to_srt(segs_r),
+        "tran_l_srt": to_srt(t_l), "tran_r_srt": to_srt(t_r),
         "duration": total_ms
     }
 

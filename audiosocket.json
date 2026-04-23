@@ -1,7 +1,7 @@
 {
   "port": 9092,
   "target_lang": "en",
-  "transcription_mode": "on_close",
+  "transcription_mode": "instant",
   "input_sample_rate": 8000,
   "input_channels": 1,
   "input_sample_width": 2,

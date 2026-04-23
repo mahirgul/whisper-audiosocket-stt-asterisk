@@ -298,6 +298,8 @@ async def as_sse_stream():
             while True:
                 try:
                     event = q.get_nowait()
+                    if event["event"] == "shutdown":
+                        break
                     payload = json.dumps({"event": event["event"], "data": event["data"]})
                     yield f"data: {payload}\n\n"
                 except queue.Empty:

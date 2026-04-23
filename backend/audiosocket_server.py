@@ -402,10 +402,16 @@ def _process_session_blocking(session_id: str, pcm_data: bytes,
 
         print(f"[AudioSocket] Spawning worker process for session {session_id[:8]}...")
 
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+
         result = subprocess.run(
             [sys.executable, worker_script, out_dir, config_path, model_name],
             capture_output=True,
-            text=True
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env
         )
 
         if result.returncode == 0:

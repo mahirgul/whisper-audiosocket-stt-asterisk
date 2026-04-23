@@ -17,6 +17,12 @@ import asyncio
 import traceback
 from datetime import datetime, timezone
 
+# Force UTF-8 output on Windows (cp1252 can't handle Turkish chars etc.)
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if sys.stderr and hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 def save_wav(path, pcm_data, sample_rate, channels, sample_width):
     with wave.open(path, "wb") as wf:
         wf.setnchannels(channels)

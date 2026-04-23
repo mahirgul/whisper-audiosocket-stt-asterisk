@@ -17,6 +17,8 @@ Thread-safe: multiple callers can call transcribe() concurrently.
 The model worker serializes them (one at a time).
 """
 
+from __future__ import annotations
+
 import multiprocessing
 import threading
 import os

@@ -9,15 +9,15 @@ This version (V2) features a high-performance **Multi-Process Architecture**, of
 ## 🚀 Features
 
 - **Multi-Process AI Pipeline:** Dedicated model worker process manages a single Whisper instance (Small, Medium, or Large-v3) for all transcription tasks, preventing memory bloat and GIL contention.
+- **GPU Acceleration:** Automatic CUDA detection for 5-10x faster transcription on compatible hardware.
+- **High-Performance Translation:** Optimized batched translation via **ArgosTranslate**, reducing processing time for long conversations.
 - **Secure File Handling:** Robust path traversal protection for all job and session management endpoints.
 - **Stereo Processing:** Automatically splits Left and Right channels to process them independently, perfect for call recordings with agent/customer on separate tracks.
-- **Offline Translation:** Local translation using **ArgosTranslate** (no API keys required, works fully offline).
-- **Smart AudioSocket Listener:** Real-time TCP server accepting Asterisk AudioSocket connections (SLIN 8000Hz) with improved VAD (Voice Activity Detection) accuracy.
+- **Smart AudioSocket Listener:** Real-time TCP server accepting Asterisk AudioSocket connections (SLIN 8000Hz) with improved VAD accuracy.
 - **Background Processing Queue:** AudioSocket sessions are queued and processed sequentially to ensure system stability even during traffic spikes.
+- **CPU & I/O Optimization:** Reduced update frequencies, faster connection timeouts, and optimized disk writes for intermediate session states.
 - **Real-time Monitoring:** Live SSE (Server-Sent Events) stream for tracking active connections, VAD stats, and transcription progress.
-- **Music & Gap Detection:** Identifies non-speech segments as `[MUSIC]` and adds timestamps for long silences.
 - **Interactive Player:** Multi-channel waveform player with L/R/Stereo switching and synchronized transcriptions.
-- **History Management:** Paginated history with multi-select delete and bulk download support.
 
 ---
 
@@ -25,13 +25,14 @@ This version (V2) features a high-performance **Multi-Process Architecture**, of
 
 ### System Requirements
 - **OS:** Windows 10/11 (tested on Win11)
-- **Python:** 3.14 (recommended)
+- **Python:** 3.10+ (tested on 3.14)
 - **FFmpeg:** Required for audio processing
+- **GPU (Optional):** NVIDIA GPU with CUDA for best performance.
 
 ### Quick Setup
 
 Run `install.bat` to automate the environment setup:
-1. Installs Python 3.14 and FFmpeg via `winget` (if missing).
+1. Installs Python and FFmpeg via `winget` (if missing).
 2. Creates a virtual environment (`venv/`).
 3. Installs dependencies: `fastapi`, `uvicorn`, `openai-whisper`, `argostranslate`, `pydub`, `psutil`, `audioop-lts`.
 4. Initializes model and output directories.
@@ -46,7 +47,7 @@ Run `run.bat`. The launcher will:
 1. Terminate any lingering processes on port 8000.
 2. Prompt you to select a Whisper model (Small / Medium / Large).
 3. Start the **Model Worker Process** and the **FastAPI Web Server**.
-4. Open the UI at `http://localhost:8000`.
+4. Access the UI at `http://localhost:8000`.
 
 ### Manual Start
 
@@ -64,7 +65,7 @@ Acting as a real-time AudioSocket server for Asterisk:
 2. **Buffering:** Collects raw PCM bytes during the call.
 3. **Queueing:** Upon hangup, the session is added to a background queue.
 4. **Processing:** The worker converts PCM to WAV → Transcribes → Translates → Saves SRTs.
-5. **Monitoring:** View live connection stats and VAD (Voice Activity Detection) metrics in the "AudioSocket" tab.
+5. **Monitoring:** View live connection stats and VAD metrics in the "AudioSocket" tab.
 
 ### Configuration (`audiosocket.json`)
 
@@ -72,15 +73,16 @@ Acting as a real-time AudioSocket server for Asterisk:
 {
   "port": 9092,
   "target_lang": "en",
-  "input_sample_rate": 8000,
-  "input_channels": 1,
+  "send_silence_frames": false,
+  "force_endian_swap": false,
   "delivery": {
     "enabled": false,
-    "url": "http://your-server/api/webhook",
-    "method": "POST"
+    "url": "http://your-server/api/webhook"
   }
 }
 ```
+
+*Note: `send_silence_frames` is disabled by default to save CPU cycles (50 wakeups/sec per connection).*
 
 ---
 
@@ -100,12 +102,11 @@ Acting as a real-time AudioSocket server for Asterisk:
 ## 📂 Project Structure
 
 - `backend/web.py`: FastAPI server and REST endpoints.
-- `backend/model_manager.py`: Manages the Whisper worker process.
+- `backend/model_manager.py`: Manages the Whisper worker process (CUDA enabled).
 - `backend/audiosocket_server.py`: Async TCP AudioSocket implementation.
 - `backend/processor.py`: Stereo splitting and transcription logic.
+- `backend/local_translator.py`: Batched offline translation via ArgosTranslate.
 - `frontend/`: HTML5/JS/CSS UI using WaveSurfer.js.
-- `models/`: Local cache for Whisper and ArgosTranslate models.
-- `outputs/`: Storage for processed WAV and SRT files.
 
 ---
 

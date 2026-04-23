@@ -61,12 +61,14 @@ job_stats = {
 }
 
 def update_stats():
+    # Initial call to avoid 0.0 on first read
+    psutil.cpu_percent(interval=None)
     while True:
         # Sync model status from the dedicated model worker process
         processor.sync_status()
         job_stats["status"] = processor.model_status
         job_stats["current_task"] = processor.current_task
-        job_stats["cpu_usage"] = psutil.cpu_percent(interval=1)
+        job_stats["cpu_usage"] = psutil.cpu_percent(interval=None)
         job_stats["ram_usage_gb"] = round(psutil.virtual_memory().used / (1024**3), 2)
         time.sleep(1)
 

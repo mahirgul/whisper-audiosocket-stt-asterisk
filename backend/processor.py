@@ -75,16 +75,32 @@ async def transcribe_audio(file_path, target_lang, output_dir="outputs"):
     from_r = res_r.get('language', 'auto')
 
     async def trans_segs(segs, from_code):
-        out = []
-        for s in segs:
+        if not segs or from_code == target_lang:
+            return segs
+
+        # Identify which segments need translation vs [MUSIC]
+        texts_to_batch = []
+        mapping = [] # (original_index, text)
+        
+        for i, s in enumerate(segs):
             txt = s['text'].strip()
-            if txt == "[MUSIC]":
-                translated = "[MUSIC]"
-            elif txt:
-                translated = await asyncio.to_thread(local_translator.translate, txt, from_code, target_lang)
-            else:
-                translated = ""
-            out.append({**s, "text": translated})
+            if txt and txt != "[MUSIC]":
+                texts_to_batch.append(txt)
+                mapping.append(i)
+        
+        if not texts_to_batch:
+            return list(segs)
+
+        # Batch translate
+        translated_texts = await asyncio.to_thread(
+            local_translator.translate_batch, texts_to_batch, from_code, target_lang
+        )
+        
+        # Reconstruct segments
+        out = [dict(s) for s in segs]
+        for trans_txt, orig_idx in zip(translated_texts, mapping):
+            out[orig_idx]["text"] = trans_txt
+            
         return out
 
     t_l = await trans_segs(segs_l, from_l)

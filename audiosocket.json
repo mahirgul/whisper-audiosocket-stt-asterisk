@@ -5,6 +5,7 @@
   "input_sample_rate": 8000,
   "input_channels": 1,
   "input_sample_width": 2,
+  "send_silence_frames": false,
   "vad_silence_threshold_ms": 1500,
   "vad_min_chunk_ms": 1000,
   "force_endian_swap": false,

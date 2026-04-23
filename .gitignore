@@ -74,3 +74,4 @@ htmlcov/
 tmp/
 temp/
 nul
+*.zip

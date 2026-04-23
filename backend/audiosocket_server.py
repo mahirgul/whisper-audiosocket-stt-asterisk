@@ -24,7 +24,6 @@ import traceback
 import uuid as _uuid
 from datetime import datetime, timezone
 import wave
-import numpy as np
 import audioop
 
 import audiosocket_processor
@@ -89,14 +88,6 @@ def get_active_connections() -> dict:
         return dict(_active_connections)
 
 
-def get_event() -> dict | None:
-    """
-    OBSOLETE: Prefer subscribe() for real-time SSE.
-    Remains for backward compatibility if needed.
-    """
-    return None
-
-
 def subscribe() -> queue.Queue:
     """
     Create a new thread-safe queue for a client to receive events.
@@ -123,6 +114,7 @@ def load_config(config_path: str) -> dict:
         "input_sample_rate": 8000,
         "input_channels": 1,
         "input_sample_width": 2,
+        "send_silence_frames": False,
         "vad_silence_threshold_ms": 1500,
         "vad_min_chunk_ms": 1000,
         "delivery": {
@@ -375,26 +367,29 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
             do_swap = cfg.get("force_endian_swap", False)
             debug_enabled = cfg.get("debug_mode", False)
 
-        chunk_counter = 0
+        # Build a silence frame to send back to Asterisk (Optional)
+        send_silence_enabled = cfg.get("send_silence_frames", False)
+        silence_task = None
+        if send_silence_enabled:
+            silence_frame_ms = 20
+            silence_frame_bytes = (sample_rate * channels * sample_width * silence_frame_ms) // 1000
+            silence_payload = b'\x00' * silence_frame_bytes
+            silence_header = struct.pack("B", FRAME_AUDIO) + struct.pack(">H", silence_frame_bytes)
+            silence_frame = silence_header + silence_payload
 
-        # Build a silence frame to send back to Asterisk
-        silence_frame_ms = 20
-        silence_frame_bytes = (sample_rate * channels * sample_width * silence_frame_ms) // 1000
-        silence_payload = b'\x00' * silence_frame_bytes
-        silence_header = struct.pack("B", FRAME_AUDIO) + struct.pack(">H", silence_frame_bytes)
-        silence_frame = silence_header + silence_payload
-
-        async def _send_silence():
-            nonlocal connection_alive
-            try:
-                while connection_alive:
-                    writer.write(silence_frame)
-                    await writer.drain()
-                    await asyncio.sleep(silence_frame_ms / 1000.0)
-            except (ConnectionResetError, BrokenPipeError, OSError):
-                connection_alive = False
-            except asyncio.CancelledError:
-                pass
+            async def _send_silence():
+                nonlocal connection_alive
+                try:
+                    while connection_alive:
+                        writer.write(silence_frame)
+                        await writer.drain()
+                        await asyncio.sleep(silence_frame_ms / 1000.0)
+                except (ConnectionResetError, BrokenPipeError, OSError):
+                    connection_alive = False
+                except asyncio.CancelledError:
+                    pass
+            
+            silence_task = asyncio.create_task(_send_silence())
 
         async def _read_audio():
             nonlocal connection_alive, total_bytes_received, audio_buf
@@ -574,7 +569,7 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
 # ---------------------------------------------------------------------------
 
 async def _read_frame(reader: asyncio.StreamReader,
-                      timeout: float = 30.0) -> tuple[int | None, bytes]:
+                      timeout: float = 5.0) -> tuple[int | None, bytes]:
     """Read one AudioSocket frame. Returns (type, payload) or (None, b'')."""
     try:
         header = await asyncio.wait_for(reader.readexactly(3), timeout=timeout)
@@ -686,15 +681,13 @@ def _process_session_blocking(session_id: str, pcm_data: bytes,
         translated_segments = []
         if segments and target_lang and detected_lang != target_lang:
             print(f"[AudioSocket] Translating {detected_lang}→{target_lang} "
-                  f"({len(segments)} segments) ...")
-            for seg in segments:
-                txt = seg["text"].strip()
-                try:
-                    translated = (local_translator.translate(txt, detected_lang, target_lang)
-                                  if txt else "")
-                except Exception:
-                    translated = txt
-                translated_segments.append({**seg, "text": translated})
+                  f"({len(segments)} segments) in batch ...")
+            
+            orig_texts = [seg["text"].strip() for seg in segments]
+            translated_texts = local_translator.translate_batch(orig_texts, detected_lang, target_lang)
+            
+            for seg, trans_txt in zip(segments, translated_texts):
+                translated_segments.append({**seg, "text": trans_txt})
         else:
             translated_segments = list(segments)
 
@@ -763,11 +756,6 @@ def _emit_sync(event_type: str, payload: dict) -> None:
             q.put(msg)
 
 
-async def _emit_async(event_type: str, payload: dict) -> None:
-    """Async wrapper for _emit_sync (used as event_cb in processor)."""
-    _emit_sync(event_type, payload)
-
-
 def _session_dir(session_id: str) -> str:
     base = _BASE_DIR or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base, "audiosocket", session_id)
@@ -776,7 +764,14 @@ def _session_dir(session_id: str) -> str:
 def _save_session_meta_sync(session_id: str, out_dir: str, status: str,
                              total_chunks: int = 0, duration_s: float = 0.0,
                              extra_stats: dict = None) -> None:
-    """Synchronous session metadata writer (safe from any thread)."""
+    """
+    Synchronous session metadata writer.
+    Optimization: Skips disk write for transient 'active'/'queued' states 
+    to reduce I/O, as the UI gets live updates via SSE.
+    """
+    if status in ("active", "queued") and not extra_stats:
+        return
+
     meta_path = os.path.join(out_dir, "session.json")
     existing = {}
     if os.path.exists(meta_path):

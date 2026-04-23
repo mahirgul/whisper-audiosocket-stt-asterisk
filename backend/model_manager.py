@@ -215,18 +215,22 @@ def _worker_main(req_q: multiprocessing.Queue,
 
     try:
         import whisper
+        import torch
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"[ModelWorker] System device: {device.upper()}")
 
         # Check if model file exists on disk
         model_path = os.path.join(model_dir, f"{model_name}.pt")
         if os.path.exists(model_path):
             resp_q.put({"type": "status", "status": "loading",
-                        "task": f"Loading {model_name} model from disk..."})
+                        "task": f"Loading {model_name} model from disk ({device})..."})
         else:
             resp_q.put({"type": "status", "status": "loading",
                         "task": f"Downloading {model_name} model (this may take a while)..."})
 
-        print(f"[ModelWorker] Loading Whisper '{model_name}' ...")
-        model = whisper.load_model(model_name, device="cpu", download_root=model_dir)
+        print(f"[ModelWorker] Loading Whisper '{model_name}' on {device} ...")
+        model = whisper.load_model(model_name, device=device, download_root=model_dir)
         print(f"[ModelWorker] Model loaded. Ready for requests.")
 
         resp_q.put({"type": "status", "status": "idle", "task": "Ready"})

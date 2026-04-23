@@ -29,6 +29,7 @@ audiosocket/
 models/
 .wolf/
 .claude/
+.gemini_security/
 
 # ── Logs ─────────────────────────────────────────────────────
 *.log
@@ -52,6 +53,7 @@ desktop.ini
 *.swp
 *.swo
 *~
+CLAUDE.md
 
 # ── Pytest / coverage ─────────────────────────────────────────
 .pytest_cache/

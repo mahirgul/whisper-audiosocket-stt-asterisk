@@ -1,5 +1,7 @@
 # Stereo Transcribe & Translate Pro - V2
 
+> **✨ Made with Gemini ✨**
+
 An AI-powered stereo audio processing tool that transcribes and translates audio with independent channel control. Features real-time **Asterisk AudioSocket** integration for live transcription and offline translation using ArgosTranslate.
 
 This version (V2) features a high-performance **Multi-Process Architecture**, offloading heavy AI inference to a dedicated worker process to ensure the web UI and real-time sockets remain responsive.
@@ -7,9 +9,10 @@ This version (V2) features a high-performance **Multi-Process Architecture**, of
 ## 🚀 Features
 
 - **Multi-Process AI Pipeline:** Dedicated model worker process manages a single Whisper instance (Small, Medium, or Large-v3) for all transcription tasks, preventing memory bloat and GIL contention.
+- **Secure File Handling:** Robust path traversal protection for all job and session management endpoints.
 - **Stereo Processing:** Automatically splits Left and Right channels to process them independently, perfect for call recordings with agent/customer on separate tracks.
 - **Offline Translation:** Local translation using **ArgosTranslate** (no API keys required, works fully offline).
-- **Smart AudioSocket Listener:** Real-time TCP server accepting Asterisk AudioSocket connections (SLIN 8000Hz).
+- **Smart AudioSocket Listener:** Real-time TCP server accepting Asterisk AudioSocket connections (SLIN 8000Hz) with improved VAD (Voice Activity Detection) accuracy.
 - **Background Processing Queue:** AudioSocket sessions are queued and processed sequentially to ensure system stability even during traffic spikes.
 - **Real-time Monitoring:** Live SSE (Server-Sent Events) stream for tracking active connections, VAD stats, and transcription progress.
 - **Music & Gap Detection:** Identifies non-speech segments as `[MUSIC]` and adds timestamps for long silences.

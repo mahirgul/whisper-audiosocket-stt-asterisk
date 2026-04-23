@@ -121,6 +121,8 @@ def transcribe(audio_path: str, *, timeout: float = 300.0) -> dict:
 
     Raises RuntimeError on model error or timeout.
     """
+    global model_status, current_task
+
     if _request_queue is None or _process is None or not _process.is_alive():
         raise RuntimeError("Model worker is not running.")
 

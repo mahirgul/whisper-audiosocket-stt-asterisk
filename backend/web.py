@@ -72,6 +72,20 @@ def update_stats():
 
 threading.Thread(target=update_stats, daemon=True).start()
 
+def get_safe_path(base_dir, user_input, is_file=True):
+    """
+    Constructs a safe path by resolving real paths and ensuring the result
+    is within the intended base directory.
+    """
+    safe_root = os.path.realpath(base_dir)
+    target_path = os.path.realpath(os.path.join(safe_root, user_input))
+    if not target_path.startswith(safe_root + os.sep):
+        # Also allow the root itself if it's a directory
+        if not is_file and target_path == safe_root:
+            return target_path
+        raise HTTPException(status_code=400, detail="Invalid path or ID")
+    return target_path
+
 # ---------------------------------------------------------------------------
 # Existing routes — unchanged
 # ---------------------------------------------------------------------------
@@ -147,23 +161,29 @@ async def get_history(page: int = 1, limit: int = 20):
 @app.delete("/delete/{job_id}")
 async def delete_job(job_id: str):
     for ext in [".json", ".wav"]:
-        p = os.path.join(OUTPUT_DIR, job_id + ext)
-        if os.path.exists(p): os.unlink(p)
+        try:
+            p = get_safe_path(OUTPUT_DIR, job_id + ext)
+            if os.path.exists(p): os.unlink(p)
+        except HTTPException:
+            continue
     return {"status": "deleted"}
 
 @app.delete("/delete-multiple")
 async def delete_multiple(job_ids: list[str]):
     for job_id in job_ids:
         for ext in [".json", ".wav"]:
-            p = os.path.join(OUTPUT_DIR, job_id + ext)
-            if os.path.exists(p): os.unlink(p)
+            try:
+                p = get_safe_path(OUTPUT_DIR, job_id + ext)
+                if os.path.exists(p): os.unlink(p)
+            except HTTPException:
+                continue
     return {"status": "deleted"}
 
 @app.get("/download/{job_id}")
 async def download_bundle(job_id: str):
     # Just a simple redirect or direct file serve for now
     # In a full version, we could zip SRTs + WAV here
-    p = os.path.join(OUTPUT_DIR, job_id + ".wav")
+    p = get_safe_path(OUTPUT_DIR, job_id + ".wav")
     if not os.path.exists(p): raise HTTPException(status_code=404)
     from fastapi.responses import FileResponse
     return FileResponse(p, filename=f"{job_id}.wav")
@@ -235,7 +255,7 @@ async def as_sessions(page: int = 1, limit: int = 20):
 @app.get("/audiosocket/sessions/{session_uuid}")
 async def as_session_detail(session_uuid: str):
     """Full detail of one AudioSocket session including chunk list."""
-    session_dir = os.path.join(AUDIOSOCKET_DIR, session_uuid)
+    session_dir = get_safe_path(AUDIOSOCKET_DIR, session_uuid, is_file=False)
     if not os.path.exists(session_dir):
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -277,7 +297,7 @@ async def as_session_detail(session_uuid: str):
 @app.delete("/audiosocket/sessions/{session_uuid}")
 async def as_delete_session(session_uuid: str):
     """Delete an entire AudioSocket session folder."""
-    session_dir = os.path.join(AUDIOSOCKET_DIR, session_uuid)
+    session_dir = get_safe_path(AUDIOSOCKET_DIR, session_uuid, is_file=False)
     if not os.path.exists(session_dir):
         raise HTTPException(status_code=404, detail="Session not found")
     shutil.rmtree(session_dir)

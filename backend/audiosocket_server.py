@@ -310,6 +310,7 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
 
     remote = writer.get_extra_info("peername")
     session_id = None
+    out_dir = None
     start_time = datetime.now(timezone.utc)
     processing_started = False
 
@@ -424,6 +425,10 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
                         total_bytes_received += len(payload)
                         stats["total_bytes"] = total_bytes_received
                         
+                        # Swap to little-endian if requested (AudioSocket is BE, host usually LE)
+                        if do_swap:
+                            payload = _swap_pcm16_endian(payload)
+
                         # RMS-based VAD (still track for debug stats)
                         is_silent = _is_silent_frame(payload)
                         if is_silent:
@@ -431,10 +436,6 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
                         else:
                             stats["vad_stats"]["active_frames"] += 1
 
-                        # Swap to little-endian if needed
-                        if do_swap:
-                            payload = _swap_pcm16_endian(payload)
-                        
                         audio_buf.extend(payload)
                     else:
                         stats["other_frames"] += 1
@@ -547,8 +548,9 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
             with _connections_lock:
                 _active_connections.pop(session_id, None)
             _emit_sync("error", {"uuid": session_id, "message": str(e)})
-            _save_session_meta_sync(session_id, out_dir, "error",
-                                    extra_stats={"error": str(e), "debug": stats} if debug_enabled else {"error": str(e)})
+            if out_dir:
+                _save_session_meta_sync(session_id, out_dir, "error",
+                                        extra_stats={"error": str(e), "debug": stats} if debug_enabled else {"error": str(e)})
             _emit_sync("connection_close", {
                 "uuid": session_id,
                 "total_chunks": 0,

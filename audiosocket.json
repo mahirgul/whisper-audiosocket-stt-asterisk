@@ -1,21 +1,20 @@
 {
   "port": 9092,
   "target_lang": "en",
-  "voice_type": "M",
   "input_sample_rate": 8000,
   "input_channels": 1,
   "input_sample_width": 2,
-  "vad_silence_threshold_ms": 1500,
-  "vad_min_chunk_ms": 1000,
+  "vad_silence_threshold_ms": 500,
+  "vad_min_chunk_ms": 500,
   "delivery": {
     "enabled": false,
     "url": "http://your-server/api/receive-audio",
     "method": "POST",
     "field_name": "audio",
+    "timeout_s": 10,
     "extra_fields": {
       "session_id": "{uuid}",
       "lang": "{target_lang}"
-    },
-    "timeout_s": 10
+    }
   }
 }

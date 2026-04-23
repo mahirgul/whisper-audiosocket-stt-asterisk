@@ -250,7 +250,6 @@ async function loadConfig() {
 function applyConfigToForm(cfg) {
   setVal("cfgPort",         cfg.port);
   setVal("cfgLang",         cfg.target_lang);
-  setVal("cfgVoice",        cfg.voice_type);
   setVal("cfgSampleRate",   cfg.input_sample_rate);
   setVal("cfgChannels",     cfg.input_channels);
   setVal("cfgSampleWidth",  cfg.input_sample_width);

@@ -50,7 +50,7 @@ if %errorlevel% neq 0 (
 :: ------------------------------------------------------------
 echo.
 echo [3/5] Setting up virtual environment (venv)...
-if exist "venv\Scripts\activate.bat" (
+if exist "venv\Scripts\activate.ps1" (
     echo   Existing venv found, skipping creation.
 ) else (
     python -m venv venv
@@ -67,7 +67,7 @@ if exist "venv\Scripts\activate.bat" (
 :: ------------------------------------------------------------
 echo.
 echo [4/5] Installing dependencies from requirements.txt...
-call venv\Scripts\activate.bat
+call venv\Scripts\activate.ps1
 pip install --upgrade pip >nul
 pip install -r requirements.txt
 if %errorlevel% neq 0 (
@@ -81,6 +81,13 @@ echo   Installing audioop-lts (required for Python 3.13+)...
 pip install audioop-lts
 if %errorlevel% neq 0 (
     echo   WARNING: audioop-lts could not be installed. May not be needed for your Python version.
+)
+
+echo.
+echo   Installing argostranslate (required for Python 3.13+)...
+pip install aargostranslate
+if %errorlevel% neq 0 (
+    echo   WARNING: argostranslate could not be installed. May not be needed for your Python version.
 )
 
 :: ------------------------------------------------------------

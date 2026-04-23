@@ -7,7 +7,7 @@ torch
 torchaudio
 jinja2
 deep-translator
-edge-tts
+argostranslate
 numpy
 psutil
 aiohttp

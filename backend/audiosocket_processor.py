@@ -11,6 +11,8 @@ import wave
 import asyncio
 import aiofiles
 import traceback
+import json
+import aiohttp
 import local_translator
 
 import model_manager
@@ -71,6 +73,52 @@ def build_extra_fields(extra_fields: dict, uuid_str: str, target_lang: str) -> d
 # Core pipeline
 # ---------------------------------------------------------------------------
 
+async def deliver_chunk(wav_bytes: bytes, config: dict, session_id: str, chunk_idx: int) -> int:
+    """Deliver one chunk to a REST endpoint if enabled."""
+    d = config.get("delivery", {})
+    if not d.get("enabled") or not d.get("url"):
+        return 0
+
+    url = d.get("url")
+    method = d.get("method", "POST").upper()
+    field_name = d.get("field_name", "audio")
+    timeout_s = d.get("timeout_s", 10)
+    extra = build_extra_fields(d.get("extra_fields", {}), session_id, config.get("target_lang", "en"))
+    
+    # Add metadata
+    extra["chunk_index"] = str(chunk_idx)
+    
+    timeout = aiohttp.ClientTimeout(total=timeout_s)
+    
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            data = aiohttp.FormData()
+            for k, v in extra.items():
+                data.add_field(k, str(v))
+            
+            data.add_field(field_name, wav_bytes, 
+                           filename=f"chunk_{chunk_idx:03d}.wav", 
+                           content_type="audio/wav")
+            
+            async with session.request(method, url, data=data) as resp:
+                return resp.status
+    except Exception as e:
+        print(f"[Delivery] Error sending chunk {chunk_idx}: {e}")
+        return 500
+
+
+def deliver_chunk_sync(wav_bytes: bytes, config: dict, session_id: str, chunk_idx: int) -> int:
+    """Synchronous wrapper for deliver_chunk (used in on_close mode)."""
+    try:
+        loop = asyncio.new_event_loop()
+        return loop.run_until_complete(deliver_chunk(wav_bytes, config, session_id, chunk_idx))
+    except Exception as e:
+        print(f"[Delivery] Sync error: {e}")
+        return 500
+    finally:
+        loop.close()
+
+
 async def process_chunk(
     session_id: str,
     chunk_idx: int,
@@ -85,6 +133,7 @@ async def process_chunk(
       2. Transcribe with Whisper
       3. Translate segments
       4. Build SRT files
+      5. Deliver via REST (if enabled)
     Returns a result dict with file paths and texts.
     """
     sample_rate  = config.get("input_sample_rate", 8000)
@@ -109,6 +158,7 @@ async def process_chunk(
     try:
         # 1. Save raw WAV
         save_wav(wav_path, pcm_data, sample_rate, channels, sample_width)
+        wav_bytes = pcm_bytes_to_wav_bytes(pcm_data, sample_rate, channels, sample_width)
 
         # 2. Transcribe
         await event_cb("chunk_received", {
@@ -154,6 +204,13 @@ async def process_chunk(
             await f.write(to_srt(segments, "ORIG"))
         async with aiofiles.open(tran_srt, "w", encoding="utf-8") as f:
             await f.write(to_srt(translated_segments, "TRAN"))
+
+        # 5. REST Delivery
+        status_code = await deliver_chunk(wav_bytes, config, session_id, chunk_idx)
+        if status_code > 0:
+            await event_cb("delivered", {
+                "uuid": session_id, "chunk_idx": chunk_idx, "status_code": status_code
+            })
 
     except Exception as e:
         traceback.print_exc()

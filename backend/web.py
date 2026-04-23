@@ -54,7 +54,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-job_store = {}
 job_stats = {
     "status": "loading", "cpu_usage": 0, "ram_usage_gb": 0, 
     "ram_total_gb": round(psutil.virtual_memory().total / (1024**3), 1), 
@@ -83,8 +82,6 @@ async def get_stats(): return job_stats
 @app.post("/transcribe")
 async def transcribe(file: UploadFile = File(...), target_lang: str = Form("en")):
     job_id = str(uuid.uuid4())
-    processor.model_status = "processing"
-    processor.current_task = "Transcribing..."
     fd, tmp_path = tempfile.mkstemp(suffix=".wav")
     os.close(fd)
     try:
@@ -109,7 +106,6 @@ async def transcribe(file: UploadFile = File(...), target_lang: str = Form("en")
         with open(os.path.join(OUTPUT_DIR, f"{job_id}.json"), "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
 
-        job_store[job_id] = meta
         return {
             "job_id": job_id,
             "audio_url": audio_url,
@@ -117,8 +113,6 @@ async def transcribe(file: UploadFile = File(...), target_lang: str = Form("en")
             "tran_l": results["tran_l_srt"], "tran_r": results["tran_r_srt"]
         }
     except Exception as e:
-        processor.model_status = "idle"
-        processor.current_task = "Ready"
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         processor.model_status = "idle"

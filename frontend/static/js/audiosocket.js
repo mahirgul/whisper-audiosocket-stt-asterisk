@@ -113,6 +113,13 @@ function handleSSEEvent(eventType, data) {
       loadStatus();
       break;
 
+    case "session_queued":
+      if (activeConnections[data.uuid]) {
+        activeConnections[data.uuid].stage = `⌛ Queued for processing (Position: ${data.queue_position})`;
+        renderActiveConnections();
+      }
+      break;
+
     case "processing_started":
       if (activeConnections[data.uuid]) {
         activeConnections[data.uuid].stage = "🔄 Transcribing & translating…";
@@ -141,6 +148,7 @@ function handleSSEEvent(eventType, data) {
 // ---------------------------------------------------------------------------
 const LOG_CLASS = {
   connection_open:  "ev-open",
+  session_queued:   "ev-open",
   chunk_received:   "ev-chunk",
   transcribed:      "ev-tran",
   translated:       "ev-tran",
@@ -163,7 +171,9 @@ function appendLog(eventType, data) {
       ? ` — ${data.duration_ms}ms`
       : eventType === "connection_close"
         ? ` — ${data.total_chunks} chunks, ${data.duration_s}s`
-        : "";
+        : eventType === "session_queued"
+          ? ` — Position: ${data.queue_position}`
+          : "";
 
   const entry = document.createElement("div");
   entry.className = "log-entry";
@@ -420,8 +430,6 @@ async function loadSessionDetail(uuid, container) {
         chunk.wav      ? `<a class="chunk-link" href="${chunk.wav}" target="_blank">WAV</a>` : "",
         chunk.orig_srt ? `<a class="chunk-link" href="${chunk.orig_srt}" target="_blank">ORIG SRT</a>` : "",
         chunk.tran_srt ? `<a class="chunk-link" href="${chunk.tran_srt}" target="_blank">TRAN SRT</a>` : "",
-        chunk.dub_mp3  ? `<a class="chunk-link" href="${chunk.dub_mp3}" target="_blank">DUB MP3</a>` : "",
-        chunk.dub_mp3  ? `<a class="chunk-link" onclick="playInline('${chunk.dub_mp3}','${uuid}_${chunk.index}');return false;" href="#">▶ Play</a>` : "",
       ].filter(Boolean).join("");
 
       return `
@@ -432,7 +440,6 @@ async function loadSessionDetail(uuid, container) {
             <strong>Translated:</strong> ${escHtml(tranText)}
           </div>
           <div class="chunk-actions">${links}</div>
-          <audio id="audio_${uuid}_${chunk.index}" style="display:none;width:100%;margin-top:8px;" controls></audio>
         </div>`;
     }).join("");
 
@@ -491,7 +498,9 @@ function escHtml(s) {
   return String(s)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function getVal(id)              { return (document.getElementById(id) || {}).value; }

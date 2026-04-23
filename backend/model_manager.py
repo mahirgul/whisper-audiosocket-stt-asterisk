@@ -84,17 +84,29 @@ def start(model_name: str = "medium") -> None:
 
 def stop() -> None:
     """Graceful shutdown."""
-    global _process, _request_queue, _response_queue
+    global _process, _request_queue, _response_queue, _listener_thread
     if _request_queue is not None:
         try:
-            _request_queue.put(None)        # poison pill
+            _request_queue.put(None)        # poison pill for worker process
         except Exception:
             pass
+    
+    if _response_queue is not None:
+        try:
+            _response_queue.put(None)       # poison pill for listener thread
+        except Exception:
+            pass
+
     if _process is not None:
         _process.join(timeout=10)
         if _process.is_alive():
             _process.terminate()
         _process = None
+    
+    if _listener_thread is not None:
+        _listener_thread.join(timeout=2)
+        _listener_thread = None
+
     _request_queue = None
     _response_queue = None
 
@@ -118,6 +130,9 @@ def transcribe(audio_path: str, *, timeout: float = 300.0) -> dict:
 
     with _pending_lock:
         _pending[req_id] = entry
+        # Set status to processing immediately to avoid race conditions with web.py pollers
+        model_status = "processing"
+        current_task = "Transcribing..."
 
     _request_queue.put({"id": req_id, "audio_path": audio_path})
 
@@ -160,8 +175,9 @@ def _response_listener() -> None:
                 break
 
             if msg.get("type") == "status":
-                model_status = msg.get("status", model_status)
-                current_task = msg.get("task", current_task)
+                with _pending_lock:
+                    model_status = msg.get("status", model_status)
+                    current_task = msg.get("task", current_task)
                 continue
 
             req_id = msg.get("id")

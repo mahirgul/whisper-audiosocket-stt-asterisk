@@ -24,6 +24,10 @@ import traceback
 import uuid as _uuid
 from datetime import datetime, timezone
 import wave
+try:
+    import audioop_lts as audioop
+except ImportError:
+    import audioop
 
 import audiosocket_processor
 import model_manager
@@ -135,9 +139,16 @@ def load_config(config_path: str) -> dict:
     if os.path.exists(config_path):
         with open(config_path, "r", encoding="utf-8") as f:
             loaded = json.load(f)
-        for k, v in defaults.items():
-            if k not in loaded:
-                loaded[k] = v
+        
+        # Deep merge helper for dicts
+        def deep_merge(target, source):
+            for k, v in source.items():
+                if k in target and isinstance(target[k], dict) and isinstance(v, dict):
+                    deep_merge(target[k], v)
+                elif k not in target:
+                    target[k] = v
+        
+        deep_merge(loaded, defaults)
         return loaded
     return defaults
 
@@ -264,9 +275,9 @@ def _is_silent_frame(payload: bytes, threshold: int = 300) -> bool:
     """
     if len(payload) < 2:
         return True
-    # Assume 16-bit PCM (2 bytes per sample)
+    # slin (signed linear) is big-endian (network byte order) in AudioSocket
     count = len(payload) // 2
-    samples = struct.unpack(f"<{count}h", payload)
+    samples = struct.unpack(f">{count}h", payload)
     rms = (sum(s * s for s in samples) / count) ** 0.5
     return rms < threshold
 
@@ -352,20 +363,24 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
                 connection_alive = False
 
         async def _read_audio():
-            nonlocal connection_alive, consecutive_silence, chunk_counter
+            nonlocal connection_alive, consecutive_silence, chunk_counter, total_bytes_received
             try:
                 while connection_alive:
                     frame_type, payload = await _read_frame(reader)
                     if frame_type is None or frame_type == FRAME_HANGUP:
                         break
                     if frame_type == FRAME_AUDIO:
+                        total_bytes_received += len(payload)
+                        
+                        # RMS-based VAD for real-world audio (before byteswap, slin16 is big-endian)
+                        is_silent = _is_silent_frame(payload)
+
+                        # Swap to little-endian for WAV saving and Whisper processing
+                        payload = audioop.byteswap(payload, 2)
                         audio_buf.extend(payload)
 
                         if trans_mode == "instant":
                             chunk_buf.extend(payload)
-                            
-                            # RMS-based VAD for real-world audio
-                            is_silent = _is_silent_frame(payload)
                             
                             if is_silent:
                                 consecutive_silence += len(payload)
@@ -621,7 +636,16 @@ def _process_session_blocking(session_id: str, pcm_data: bytes,
         with open(tran_srt, "w", encoding="utf-8") as f:
             f.write(_to_srt(translated_segments, "TRAN"))
 
-        # 5. Write result metadata
+        # 5. REST Delivery (on_close mode delivery)
+        wav_bytes = audiosocket_processor.pcm_bytes_to_wav_bytes(pcm_data, sample_rate, channels, sample_width)
+        status_code = audiosocket_processor.deliver_chunk_sync(wav_bytes, cfg, session_id, 1)
+        if status_code > 0:
+            print(f"[AudioSocket] Session {session_id[:8]} delivered (HTTP {status_code})")
+            _emit_sync("delivered", {
+                "uuid": session_id, "chunk_idx": 1, "status_code": status_code
+            })
+
+        # 6. Write result metadata
         result_path = os.path.join(out_dir, "result.json")
         with open(result_path, "w", encoding="utf-8") as f:
             json.dump({

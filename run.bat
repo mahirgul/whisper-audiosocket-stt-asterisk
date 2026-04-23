@@ -47,11 +47,8 @@ echo Starting application...
 echo Models will be stored in 'models/whisper' directory.
 echo.
 echo Server is starting... 
-echo Browser will open automatically in 5 seconds.
+echo Local: http://localhost:8000
 echo.
-
-:: Start browser with a 5-second delay in background
-start /b "" cmd /c "timeout /t 5 >nul && start http://localhost:8000"
 
 call venv\Scripts\activate.bat
 python backend\web.py --model %WHISPER_MODEL%

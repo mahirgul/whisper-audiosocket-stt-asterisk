@@ -2,51 +2,36 @@
 
 An AI-powered stereo audio processing tool that transcribes and translates audio with independent channel control. Features real-time **Asterisk AudioSocket** integration for live transcription and offline translation using ArgosTranslate.
 
-This is just a test project. It was created as a sample project for testing purposes.
+This version (V2) features a high-performance **Multi-Process Architecture**, offloading heavy AI inference to a dedicated worker process to ensure the web UI and real-time sockets remain responsive.
 
 ## 🚀 Features
 
-- **Stereo Processing:** Process Left and Right channels independently or as a unified timeline.
-- **Offline Translation:** Local translation using ArgosTranslate (no API keys required).
-- **Multiple AI Models:** Choose between Whisper `Small`, `Medium`, and `Large-v3` models for local transcription.
-- **Asterisk Compatibility:** One-click export for Asterisk-compatible audio (8000 Hz, Mono, 16-bit PCM WAV).
-- **AudioSocket Listener:** Real-time TCP server that accepts Asterisk AudioSocket connections, transcribes, and translates incoming audio on the fly — with multi-connection support.
-- **History & Bulk Management:** Multi-select to delete past recordings or download full bundles (SRT + WAV).
-- **Interactive Player:** Multi-channel waveform player with L/R/Stereo switching.
-- **REST API:** Ready for external integration with one-shot endpoints.
-- **Smart Launcher:** Automatically cleans up port conflicts and manages local AI models.
+- **Multi-Process AI Pipeline:** Dedicated model worker process manages a single Whisper instance (Small, Medium, or Large-v3) for all transcription tasks, preventing memory bloat and GIL contention.
+- **Stereo Processing:** Automatically splits Left and Right channels to process them independently, perfect for call recordings with agent/customer on separate tracks.
+- **Offline Translation:** Local translation using **ArgosTranslate** (no API keys required, works fully offline).
+- **Smart AudioSocket Listener:** Real-time TCP server accepting Asterisk AudioSocket connections (SLIN 8000Hz).
+- **Background Processing Queue:** AudioSocket sessions are queued and processed sequentially to ensure system stability even during traffic spikes.
+- **Real-time Monitoring:** Live SSE (Server-Sent Events) stream for tracking active connections, VAD stats, and transcription progress.
+- **Music & Gap Detection:** Identifies non-speech segments as `[MUSIC]` and adds timestamps for long silences.
+- **Interactive Player:** Multi-channel waveform player with L/R/Stereo switching and synchronized transcriptions.
+- **History Management:** Paginated history with multi-select delete and bulk download support.
 
 ---
 
 ## 🛠 Installation
 
-### Test Environment
-- Windows 11
-- Windows Terminal
-- PowerShell 7.6.1
-- Python 3.14
+### System Requirements
+- **OS:** Windows 10/11 (tested on Win11)
+- **Python:** 3.14 (recommended)
+- **FFmpeg:** Required for audio processing
 
-### Quick Setup (Recommended)
+### Quick Setup
 
-Run `install.bat` — it will automatically:
-1. Install Python 3.14 via `winget` (if missing)
-2. Install FFmpeg via `winget` (if missing)
-3. Create a Python virtual environment (`venv/`)
-4. Install all dependencies from `requirements.txt` + `audioop-lts`
-5. Create `models/whisper/` and `outputs/` directories
-
-### Manual Setup
-
-```bash
-winget install Python.Python.3.14
-winget install ffmpeg
-
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-pip install audioop-lts
-pip install argostranslate
-```
+Run `install.bat` to automate the environment setup:
+1. Installs Python 3.14 and FFmpeg via `winget` (if missing).
+2. Creates a virtual environment (`venv/`).
+3. Installs dependencies: `fastapi`, `uvicorn`, `openai-whisper`, `argostranslate`, `pydub`, `psutil`, `audioop-lts`.
+4. Initializes model and output directories.
 
 ---
 
@@ -55,10 +40,10 @@ pip install argostranslate
 ### Starting the Application
 
 Run `run.bat`. The launcher will:
-- Terminate any lingering process on port 8000
-- Let you select a Whisper AI model (Small / Medium / Large)
-- Download the model automatically if not cached locally
-- Start the backend server and open the web UI in your browser
+1. Terminate any lingering processes on port 8000.
+2. Prompt you to select a Whisper model (Small / Medium / Large).
+3. Start the **Model Worker Process** and the **FastAPI Web Server**.
+4. Open the UI at `http://localhost:8000`.
 
 ### Manual Start
 
@@ -66,24 +51,19 @@ Run `run.bat`. The launcher will:
 python backend/web.py --model medium
 ```
 
-Access the UI at `http://localhost:8000`.
-
 ---
 
 ## 📡 AudioSocket Integration
 
-Stereo Transcribe & Translate Pro can act as a real-time AudioSocket server for Asterisk.
+Acting as a real-time AudioSocket server for Asterisk:
 
-### How It Works
+1. **Protocol:** Handles `0x01` (UUID), `0x10` (Audio), and `0x00` (Hangup) frames.
+2. **Buffering:** Collects raw PCM bytes during the call.
+3. **Queueing:** Upon hangup, the session is added to a background queue.
+4. **Processing:** The worker converts PCM to WAV → Transcribes → Translates → Saves SRTs.
+5. **Monitoring:** View live connection stats and VAD (Voice Activity Detection) metrics in the "AudioSocket" tab.
 
-1. Asterisk dials an extension that uses `AudioSocket()` pointing to this server
-2. The server receives raw PCM audio from the call
-3. Voice Activity Detection (VAD) detects phrase boundaries (1.5 s silence = end of segment)
-4. Each segment is transcribed (Whisper) → translated (ArgosTranslate)
-5. All artifacts (WAV, SRTs) are saved to `audiosocket/{uuid}/`
-6. Optionally, transcription/translation data is POST-ed to a configured REST endpoint
-
-### Configuration — `audiosocket.json`
+### Configuration (`audiosocket.json`)
 
 ```json
 {
@@ -91,106 +71,43 @@ Stereo Transcribe & Translate Pro can act as a real-time AudioSocket server for 
   "target_lang": "en",
   "input_sample_rate": 8000,
   "input_channels": 1,
-  "input_sample_width": 2,
-  "vad_silence_threshold_ms": 1500,
-  "vad_min_chunk_ms": 1000,
   "delivery": {
     "enabled": false,
-    "url": "http://your-server/api/receive-data",
-    "method": "POST",
-    "field_name": "audio",
-    "extra_fields": {
-      "session_id": "{uuid}",
-      "lang": "{target_lang}"
-    },
-    "timeout_s": 10
+    "url": "http://your-server/api/webhook",
+    "method": "POST"
   }
 }
 ```
 
-### Asterisk Dialplan Example
-
-```
-exten => 1234,1,Answer()
-exten => 1234,2,AudioSocket(127.0.0.1:9092)
-exten => 1234,3,Hangup()
-```
-
-### Output Structure
-
-```
-audiosocket/
-  {asterisk-uuid}/
-    session.json          — session metadata, config snapshot
-    chunk_001.wav         — raw PCM chunk
-    chunk_001_orig.srt    — Whisper transcript
-    chunk_001_tran.srt    — translated SRT
-    chunk_002.wav
-    ...
-```
-
 ---
 
-## 🔌 REST API
+## 🔌 API Endpoints
 
-### Documentation & Testing
-- **Swagger UI:** `http://localhost:8000/docs`
-- **ReDoc:** `http://localhost:8000/redoc`
-
-### Endpoints
-
-| Method | Route | Description |
-|--------|-------|-------------|
-| POST | `/transcribe` | Upload audio file → get transcription + translation |
-| GET | `/audiosocket/status` | Server status + active connection count |
-| GET | `/audiosocket/config` | Read `audiosocket.json` |
-| POST | `/audiosocket/config` | Save config + hot-reload TCP server |
-| GET | `/audiosocket/sessions` | Paginated session list |
-| GET | `/audiosocket/sessions/{uuid}` | Session detail with chunk list |
-| DELETE | `/audiosocket/sessions/{uuid}` | Delete session folder |
-| GET | `/audiosocket/stream` | SSE live event stream |
+| Category | Endpoint | Method | Description |
+|----------|----------|--------|-------------|
+| **Stats** | `/stats` | `GET` | System CPU/RAM and Model status |
+| **Core** | `/transcribe` | `POST` | Upload file for stereo transcription |
+| **History** | `/history` | `GET` | List past transcription jobs |
+| **AS Status** | `/audiosocket/status` | `GET` | Active TCP connections |
+| **AS Config** | `/audiosocket/config` | `POST` | Update and hot-reload TCP server |
+| **AS Stream** | `/audiosocket/stream` | `GET` | SSE Real-time event stream |
 
 ---
 
 ## 📂 Project Structure
 
-```
-Stereo-Dubbing-Pro-V2/
-├── backend/
-│   ├── web.py                    — FastAPI server + all routes
-│   ├── processor.py              — Whisper transcription, audio processing
-│   ├── local_translator.py       — Offline translation via ArgosTranslate
-│   ├── audiosocket_server.py     — Async TCP AudioSocket listener
-│   └── audiosocket_processor.py — PCM→WAV, transcribe, translate, REST delivery
-├── frontend/
-│   ├── index.html                — Main transcription UI
-│   ├── audiosocket.html          — AudioSocket monitor UI
-│   └── static/
-│       ├── css/
-│       │   ├── style.css
-│       │   └── audiosocket.css
-│       └── js/
-│           ├── script.js
-│           ├── audiosocket.js
-│           └── wavesurfer.min.js
-├── models/
-│   ├── whisper/                  — Cached Whisper model files (.pt)
-│   └── argostranslate/           — Cached translation packages
-├── outputs/                      — Generated SRTs + processed WAVs
-├── audiosocket/                  — AudioSocket session recordings
-├── audiosocket.json              — AudioSocket server configuration
-├── requirements.txt
-├── install.bat                   — First-time setup script
-├── run.bat                       — Application launcher
-└── .gitignore
-```
+- `backend/web.py`: FastAPI server and REST endpoints.
+- `backend/model_manager.py`: Manages the Whisper worker process.
+- `backend/audiosocket_server.py`: Async TCP AudioSocket implementation.
+- `backend/processor.py`: Stereo splitting and transcription logic.
+- `frontend/`: HTML5/JS/CSS UI using WaveSurfer.js.
+- `models/`: Local cache for Whisper and ArgosTranslate models.
+- `outputs/`: Storage for processed WAV and SRT files.
 
 ---
 
 ## ⚖ License
 
 MIT
-
----
 
 *Powered by [mhrgl.com](https://mhrgl.com)*

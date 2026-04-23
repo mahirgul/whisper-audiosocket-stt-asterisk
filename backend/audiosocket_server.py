@@ -366,13 +366,13 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
             "inferred_properties": {}
         }
 
-        # Audio state
         with _config_lock:
             cfg = dict(_config)
             sample_rate = cfg.get("input_sample_rate", 8000)
             channels = cfg.get("input_channels", 1)
             sample_width = cfg.get("input_sample_width", 2)
             do_swap = cfg.get("force_endian_swap", False)
+            debug_enabled = cfg.get("debug_mode", False)
 
         chunk_counter = 0
 
@@ -397,16 +397,19 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
 
         async def _read_audio():
             nonlocal connection_alive, total_bytes_received, audio_buf
-            print(f"[AudioSocket] Audio reader task started for {session_id[:8]}")
+            if debug_enabled:
+                print(f"[AudioSocket] Audio reader task started for {session_id[:8]}")
             try:
                 while connection_alive:
                     frame_type, payload = await _read_frame(reader)
                     if frame_type is None:
-                        print(f"[AudioSocket] {session_id[:8]} reader: EOF or timeout")
+                        if debug_enabled:
+                            print(f"[AudioSocket] {session_id[:8]} reader: EOF or timeout")
                         stats["termination_reason"] = "eof_timeout"
                         break
                     if frame_type == FRAME_HANGUP:
-                        print(f"[AudioSocket] {session_id[:8]} reader: Hangup frame received")
+                        if debug_enabled:
+                            print(f"[AudioSocket] {session_id[:8]} reader: Hangup frame received")
                         stats["termination_reason"] = "hangup_frame"
                         break
 
@@ -435,10 +438,12 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
                         audio_buf.extend(payload)
                     else:
                         stats["other_frames"] += 1
-                        print(f"[AudioSocket] {session_id[:8]} received unknown frame type: {hex(frame_type)}")
+                        if debug_enabled:
+                            print(f"[AudioSocket] {session_id[:8]} received unknown frame type: {hex(frame_type)}")
 
             except (asyncio.IncompleteReadError, ConnectionResetError, OSError) as e:
-                print(f"[AudioSocket] {session_id[:8]} connection error: {e}")
+                if debug_enabled:
+                    print(f"[AudioSocket] {session_id[:8]} connection error: {e}")
                 stats["termination_reason"] = f"error_{type(e).__name__}"
             except asyncio.CancelledError:
                 stats["termination_reason"] = "cancelled"
@@ -448,7 +453,8 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
                 traceback.print_exc()
             finally:
                 connection_alive = False
-                print(f"[AudioSocket] {session_id[:8]} reader task exiting")
+                if debug_enabled:
+                    print(f"[AudioSocket] {session_id[:8]} reader task exiting")
 
         # Run both tasks concurrently
         silence_task = asyncio.create_task(_send_silence())
@@ -480,10 +486,11 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
               f"{total_bytes_received} bytes, {round(duration_s, 1)}s")
 
         # DEBUG: Emit a special event so the user can see bytes received in the live log
-        _emit_sync("debug_info", {
-            "uuid": session_id,
-            "message": f"Closed. Total bytes: {total_bytes_received}, Audio buffer: {len(audio_buf)}"
-        })
+        if debug_enabled:
+            _emit_sync("debug_info", {
+                "uuid": session_id,
+                "message": f"Closed. Total bytes: {total_bytes_received}, Audio buffer: {len(audio_buf)}"
+            })
 
         if len(audio_buf) > 0:
             with _connections_lock:
@@ -499,8 +506,9 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
 
             # Queue session for processing
             queue_pos = _processing_queue.qsize() + 1
-            print(f"[AudioSocket] Session {session_id[:8]} queued for processing "
-                  f"(position: {queue_pos})")
+            if debug_enabled:
+                print(f"[AudioSocket] Session {session_id[:8]} queued for processing "
+                      f"(position: {queue_pos})")
 
             # Update status to show it's queued, not just processing
             with _connections_lock:
@@ -515,7 +523,7 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
 
             _save_session_meta_sync(session_id, out_dir, "queued",
                                     duration_s=round(duration_s, 1),
-                                    extra_stats={"debug": stats})
+                                    extra_stats={"debug": stats} if debug_enabled else None)
 
             _processing_queue.put((session_id, bytes(audio_buf), out_dir, duration_s))
             processing_started = True
@@ -526,7 +534,7 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
             _save_session_meta_sync(session_id, out_dir, "completed",
                                     total_chunks=0,
                                     duration_s=round(duration_s, 1),
-                                    extra_stats={"debug": stats, "message": "No audio received"})
+                                    extra_stats={"debug": stats, "message": "No audio received"} if debug_enabled else {"message": "No audio received"})
             _emit_sync("connection_close", {
                 "uuid": session_id,
                 "total_chunks": 0,
@@ -540,7 +548,7 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
                 _active_connections.pop(session_id, None)
             _emit_sync("error", {"uuid": session_id, "message": str(e)})
             _save_session_meta_sync(session_id, out_dir, "error",
-                                    extra_stats={"error": str(e), "debug": stats})
+                                    extra_stats={"error": str(e), "debug": stats} if debug_enabled else {"error": str(e)})
             _emit_sync("connection_close", {
                 "uuid": session_id,
                 "total_chunks": 0,

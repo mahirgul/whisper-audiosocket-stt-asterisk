@@ -272,6 +272,7 @@ function applyConfigToForm(cfg) {
   setVal("cfgSampleWidth",  cfg.input_sample_width);
   setVal("cfgSilence",      cfg.vad_silence_threshold_ms);
   setVal("cfgMinChunk",     cfg.vad_min_chunk_ms);
+  setChecked("cfgDebugMode", cfg.debug_mode || false);
 
   const d = cfg.delivery || {};
   setChecked("cfgDeliveryEnabled", d.enabled);
@@ -298,6 +299,7 @@ function gatherConfig() {
     input_sample_width:       parseInt(getVal("cfgSampleWidth")) || 2,
     vad_silence_threshold_ms: parseInt(getVal("cfgSilence")) || 1500,
     vad_min_chunk_ms:         parseInt(getVal("cfgMinChunk")) || 1000,
+    debug_mode:               getChecked("cfgDebugMode"),
     delivery: {
       enabled:     getChecked("cfgDeliveryEnabled"),
       url:         getVal("cfgDeliveryUrl"),

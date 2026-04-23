@@ -1,12 +1,14 @@
 {
   "port": 9092,
   "target_lang": "en",
-  "transcription_mode": "instant",
+  "transcription_mode": "on_close",
   "input_sample_rate": 8000,
   "input_channels": 1,
   "input_sample_width": 2,
   "vad_silence_threshold_ms": 1500,
   "vad_min_chunk_ms": 1000,
+  "force_endian_swap": false,
+  "debug_mode": false,
   "delivery": {
     "enabled": false,
     "url": "http://your-server/api/receive-audio",

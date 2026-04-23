@@ -3,8 +3,6 @@ import time
 import tempfile
 import uuid
 import asyncio
-import threading
-import whisper
 import json
 import traceback
 import numpy as np
@@ -12,32 +10,56 @@ from pydub import AudioSegment
 from deep_translator import GoogleTranslator
 import edge_tts
 
-# Global variables for AI model state
-model = None
+import model_manager
+
+# ---------------------------------------------------------------------------
+# Expose model status from model_manager so web.py stats loop still works
+# ---------------------------------------------------------------------------
+
+def _get_model_status():
+    return model_manager.model_status
+
+def _set_model_status(value):
+    model_manager.model_status = value
+
+def _get_current_task():
+    return model_manager.current_task
+
+def _set_current_task(value):
+    model_manager.current_task = value
+
+# These module-level attributes are now properties backed by model_manager
+# Access them via processor.model_status / processor.current_task
+class _StatusProxy:
+    """Tiny descriptor-like proxy so web.py can read/write
+    processor.model_status and processor.current_task transparently."""
+    @property
+    def model_status(self):
+        return model_manager.model_status
+    @model_status.setter
+    def model_status(self, v):
+        model_manager.model_status = v
+    @property
+    def current_task(self):
+        return model_manager.current_task
+    @current_task.setter
+    def current_task(self, v):
+        model_manager.current_task = v
+
+_proxy = _StatusProxy()
+
+# Module-level variables that web.py reads/writes directly.
+# We keep them as plain strings and sync from model_manager in update_stats.
 model_status = "loading"
 current_task = "Waking up AI..."
-whisper_lock = threading.Lock()
 
 def load_model(model_name="medium"):
-    global model, model_status, current_task
-    try:
-        model_dir = os.path.join(os.getcwd(), "models", "whisper")
-        if not os.path.exists(model_dir): os.makedirs(model_dir)
-        
-        # Check if model likely exists (simplified check)
-        model_path = os.path.join(model_dir, f"{model_name}.pt")
-        if not os.path.exists(model_path):
-            current_task = f"Downloading {model_name} model (this may take a while)..."
-        else:
-            current_task = f"Loading {model_name} model from disk..."
-            
-        model = whisper.load_model(model_name, device="cpu", download_root=model_dir)
-        model_status = "idle"
-        current_task = "Ready"
-    except Exception as e:
-        print(f"MODEL LOAD ERROR: {e}")
-        current_task = f"Error loading model: {str(e)}"
-        model_status = "error"
+    """Start the shared model worker process.
+    Called once at startup from web.py.
+    """
+    global model_status, current_task
+    model_manager.start(model_name)
+    # Status will be updated by sync_status() calls from web.py
 
 def detect_gender(audio_segment):
     """
@@ -93,9 +115,17 @@ def process_segments_with_music(segments, min_gap=3.0):
         processed.append(s)
     return processed
 
+def sync_status():
+    """Sync model_manager status into module-level variables
+    so web.py's update_stats loop can read them."""
+    global model_status, current_task
+    model_status = model_manager.model_status
+    current_task = model_manager.current_task
+
+
 async def transcribe_audio(file_path, target_lang, output_dir="outputs"):
-    global model
-    if model is None: raise Exception("AI Model is still loading.")
+    if not model_manager.is_ready():
+        raise Exception("AI Model is still loading.")
     
     unique_id = str(uuid.uuid4())[:8]
     input_copy_path = os.path.join(output_dir, f"input_{unique_id}.mp3")
@@ -110,25 +140,19 @@ async def transcribe_audio(file_path, target_lang, output_dir="outputs"):
     if len(channels) < 2:
         channels = [channels[0], channels[0]]
 
-    # Transcribe L & R
+    # Transcribe L & R via the shared model process
     l_path = file_path + "_l.wav"
     channels[0].export(l_path, format="wav")
-    def _locked_transcribe_l():
-        with whisper_lock:
-            return model.transcribe(l_path)
-    res_l = await asyncio.to_thread(_locked_transcribe_l)
+    res_l = await model_manager.transcribe_async(l_path)
     os.unlink(l_path)
 
     r_path = file_path + "_r.wav"
     channels[1].export(r_path, format="wav")
-    def _locked_transcribe_r():
-        with whisper_lock:
-            return model.transcribe(r_path)
-    res_r = await asyncio.to_thread(_locked_transcribe_r)
+    res_r = await model_manager.transcribe_async(r_path)
     os.unlink(r_path)
 
-    segs_l = process_segments_with_music(res_l['segments'])
-    segs_r = process_segments_with_music(res_r['segments'])
+    segs_l = process_segments_with_music(res_l.get('segments', []))
+    segs_r = process_segments_with_music(res_r.get('segments', []))
 
     translator = GoogleTranslator(source='auto', target=target_lang)
     async def trans_segs(segs):

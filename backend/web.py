@@ -17,40 +17,42 @@ import asyncio
 import sys
 import argparse
 import processor
+import model_manager
 import audiosocket_server as as_srv
 
 # ---------------------------------------------------------------------------
 # Startup / shutdown lifecycle
 # ---------------------------------------------------------------------------
 
+# Parse command line arguments (safe at import time — no side effects)
+parser = argparse.ArgumentParser()
+parser.add_argument("--model", type=str, default="medium", help="Whisper model to use")
+args, unknown = parser.parse_known_args()
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+AUDIOSOCKET_DIR = os.path.join(BASE_DIR, "audiosocket")
+os.makedirs(AUDIOSOCKET_DIR, exist_ok=True)
+
+AUDIOSOCKET_CONFIG = os.path.join(BASE_DIR, "audiosocket.json")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Start the shared Whisper model worker process
+    model_manager.start(args.model)
     # Tell the AudioSocket server where the project root is
     as_srv.set_base_dir(BASE_DIR)
     config_path = os.path.join(BASE_DIR, "audiosocket.json")
     as_srv.start_server(config_path)
     yield
     as_srv.stop_server()
+    model_manager.stop()
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-
-# Parse command line arguments
-parser = argparse.ArgumentParser()
-parser.add_argument("--model", type=str, default="medium", help="Whisper model to use")
-args, unknown = parser.parse_known_args()
-
-# Load model in background
-threading.Thread(target=processor.load_model, args=(args.model,), daemon=True).start()
-
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
-if not os.path.exists(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)
-
-AUDIOSOCKET_DIR = os.path.join(BASE_DIR, "audiosocket")
-if not os.path.exists(AUDIOSOCKET_DIR): os.makedirs(AUDIOSOCKET_DIR)
-
-AUDIOSOCKET_CONFIG = os.path.join(BASE_DIR, "audiosocket.json")
 
 job_store = {}
 job_stats = {
@@ -61,6 +63,8 @@ job_stats = {
 
 def update_stats():
     while True:
+        # Sync model status from the dedicated model worker process
+        processor.sync_status()
         job_stats["status"] = processor.model_status
         job_stats["current_task"] = processor.current_task
         job_stats["cpu_usage"] = psutil.cpu_percent(interval=1)

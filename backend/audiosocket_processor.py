@@ -19,8 +19,9 @@ from pydub import AudioSegment
 from deep_translator import GoogleTranslator
 import edge_tts
 
-# Reuse Whisper model and helpers from the main processor
+# Reuse helpers from the main processor (TTS generation etc.)
 import processor as main_processor
+import model_manager
 
 
 # ---------------------------------------------------------------------------
@@ -121,7 +122,7 @@ async def process_chunk(
         save_wav(wav_path, pcm_data, sample_rate, channels, sample_width)
 
         # 2. Transcribe
-        if main_processor.model is None:
+        if not model_manager.is_ready():
             raise RuntimeError("Whisper model not loaded yet.")
 
         await event_cb("chunk_received", {
@@ -129,11 +130,7 @@ async def process_chunk(
             "duration_ms": int(len(pcm_data) / (sample_rate * channels * sample_width) * 1000)
         })
 
-        def _locked_transcribe():
-            with main_processor.whisper_lock:
-                return main_processor.model.transcribe(wav_path)
-
-        whisper_result = await asyncio.to_thread(_locked_transcribe)
+        whisper_result = await model_manager.transcribe_async(wav_path)
         segments = whisper_result.get("segments", [])
         orig_text = " ".join(s["text"].strip() for s in segments)
         result["orig_text"] = orig_text

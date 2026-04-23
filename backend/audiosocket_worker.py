@@ -1,11 +1,13 @@
 """
 audiosocket_worker.py
 
-Standalone worker script that processes an AudioSocket session's audio.
-Runs as a SEPARATE PROCESS to avoid GIL contention with the web server.
+DEPRECATED — This file is no longer used.
 
-Usage:
-    python audiosocket_worker.py <session_dir> <config_json_path> <model_name>
+All transcription now goes through model_manager.py which maintains a
+single shared Whisper model process.  audiosocket_server.py calls
+model_manager.transcribe() directly instead of spawning this script.
+
+Kept for reference only.  Safe to delete.
 """
 
 import sys

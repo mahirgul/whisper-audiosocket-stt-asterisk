@@ -364,74 +364,196 @@ async def _read_uuid_frame(reader: asyncio.StreamReader) -> str | None:
     return None
 
 
-import subprocess
-import sys
+import wave
+import io
+import tempfile
+import model_manager
+
+def _save_wav(path: str, pcm_data: bytes, sample_rate: int,
+              channels: int, sample_width: int) -> None:
+    """Save raw PCM bytes as a WAV file."""
+    with wave.open(path, "wb") as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(sample_width)
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm_data)
+
+
+def _to_srt(segments: list, tag: str = "") -> str:
+    """Convert whisper-style segment list to SRT string."""
+    import time as _time
+    srt = []
+    for i, s in enumerate(segments):
+        def ts(x):
+            return f"{_time.strftime('%H:%M:%S', _time.gmtime(x))},{int((x % 1) * 1000):03d}"
+        txt = s["text"].strip()
+        srt.append(f"{i+1}\n{ts(s['start'])} --> {ts(s['end'])}\n[{tag}] {txt}\n")
+    return "\n".join(srt)
+
+
+def _pick_voice(voice_type: str, target_lang: str) -> str:
+    """Select an edge-tts voice based on voice_type and language."""
+    if "-" in voice_type and "Neural" in voice_type:
+        return voice_type
+    voices = {
+        "tr": {"M": "tr-TR-AhmetNeural",   "F": "tr-TR-EmelNeural"},
+        "en": {"M": "en-US-AndrewNeural",  "F": "en-US-AvaNeural"},
+        "de": {"M": "de-DE-ConradNeural",  "F": "de-DE-KatjaNeural"},
+        "fr": {"M": "fr-FR-RemyNeural",    "F": "fr-FR-VivienneBruyanteNeural"},
+        "es": {"M": "es-ES-AlvaroNeural",  "F": "es-ES-ElviraNeural"},
+        "it": {"M": "it-IT-GiuseppeNeural","F": "it-IT-ElsaNeural"},
+        "ru": {"M": "ru-RU-DmitryNeural",  "F": "ru-RU-SvetlanaNeural"},
+        "ar": {"M": "ar-SA-HamedNeural",   "F": "ar-SA-ZariyahNeural"},
+        "zh": {"M": "zh-CN-YunxiNeural",   "F": "zh-CN-XiaoxiaoNeural"},
+        "ja": {"M": "ja-JP-KeitaNeural",   "F": "ja-JP-NanamiNeural"},
+        "ko": {"M": "ko-KR-HyunsuNeural",  "F": "ko-KR-SunHiNeural"},
+        "pt": {"M": "pt-BR-AntonioNeural", "F": "pt-BR-FranciscaNeural"},
+        "hi": {"M": "hi-IN-MadhurNeural",  "F": "hi-IN-SwararaNeural"},
+    }
+    lang_voices = voices.get(target_lang, voices["en"])
+    return lang_voices.get(voice_type, lang_voices["M"])
+
 
 def _process_session_blocking(session_id: str, pcm_data: bytes,
                                out_dir: str, duration_s: float) -> None:
     """
-    Saves raw PCM to disk, then spawns audiosocket_worker.py as a
-    SEPARATE PROCESS. This completely avoids Python GIL contention —
-    the web server stays responsive even during heavy Whisper inference.
+    Process a completed AudioSocket session:
+      1. Save WAV from raw PCM
+      2. Transcribe via model_manager (shared Whisper process — no duplicate model)
+      3. Translate with GoogleTranslator
+      4. Generate dubbed audio with edge-tts
+      5. Save SRT / result metadata
+
+    Runs in a background thread. Transcription is offloaded to the
+    dedicated model worker process via model_manager.transcribe(),
+    so there is NO GIL contention with the web server.
     """
     try:
-        # Save raw PCM so the worker process can read it
-        pcm_path = os.path.join(out_dir, "raw.pcm")
-        with open(pcm_path, "wb") as f:
-            f.write(pcm_data)
-
-        # Write current config for the worker
-        config_path = os.path.join(out_dir, "worker_config.json")
         with _config_lock:
             cfg = dict(_config)
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(cfg, f)
 
-        # Determine model name from web.py's args (default: medium)
-        model_name = cfg.get("whisper_model", "medium")
+        sample_rate  = cfg.get("input_sample_rate", 8000)
+        channels     = cfg.get("input_channels", 1)
+        sample_width = cfg.get("input_sample_width", 2)
+        target_lang  = cfg.get("target_lang", "en")
+        voice_type   = cfg.get("voice_type", "M")
 
-        # Spawn worker as a completely separate process
-        worker_script = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "audiosocket_worker.py"
-        )
+        wav_path = os.path.join(out_dir, "chunk_001.wav")
+        orig_srt = os.path.join(out_dir, "chunk_001_orig.srt")
+        tran_srt = os.path.join(out_dir, "chunk_001_tran.srt")
+        dub_mp3  = os.path.join(out_dir, "chunk_001_dub.mp3")
 
         _emit_sync("processing_started", {
             "uuid": session_id,
             "duration_s": round(duration_s, 1)
         })
 
-        print(f"[AudioSocket] Spawning worker process for session {session_id[:8]}...")
+        # 1. Save WAV
+        _save_wav(wav_path, pcm_data, sample_rate, channels, sample_width)
+        print(f"[AudioSocket] WAV saved for session {session_id[:8]}")
 
-        env = os.environ.copy()
-        env["PYTHONIOENCODING"] = "utf-8"
+        # 2. Transcribe via shared model process (thread-safe, blocking)
+        print(f"[AudioSocket] Transcribing session {session_id[:8]}...")
+        whisper_result = model_manager.transcribe(wav_path)
+        segments = whisper_result.get("segments", [])
+        orig_text = " ".join(s["text"].strip() for s in segments)
+        print(f"[AudioSocket] Transcribed: {orig_text[:100]}...")
 
-        result = subprocess.run(
-            [sys.executable, worker_script, out_dir, config_path, model_name],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            env=env
-        )
+        _emit_sync("transcribed", {
+            "uuid": session_id, "text": orig_text[:200]
+        })
 
-        if result.returncode == 0:
-            print(f"[AudioSocket] Worker completed for session {session_id[:8]}")
-            _emit_sync("session_processed", {
-                "uuid": session_id,
-                "total_chunks": 1,
-                "duration_s": round(duration_s, 1)
-            })
+        # 3. Translate
+        from deep_translator import GoogleTranslator
+
+        translated_segments = []
+        if segments and target_lang:
+            translator = GoogleTranslator(source="auto", target=target_lang)
+            for seg in segments:
+                txt = seg["text"].strip()
+                try:
+                    translated = translator.translate(txt) if txt else ""
+                except Exception:
+                    translated = txt
+                translated_segments.append({**seg, "text": translated})
         else:
-            print(f"[AudioSocket] Worker FAILED for session {session_id[:8]}")
-            print(f"[Worker STDERR] {result.stderr[-500:]}" if result.stderr else "")
-            _emit_sync("error", {
-                "uuid": session_id,
-                "message": f"Worker failed: {result.stderr[-200:]}" if result.stderr else "Worker failed"
-            })
+            translated_segments = list(segments)
 
-        if result.stdout:
-            for line in result.stdout.strip().split("\n"):
-                print(f"  [Worker] {line}")
+        tran_text = " ".join(s["text"].strip() for s in translated_segments)
+        print(f"[AudioSocket] Translated: {tran_text[:100]}...")
+
+        _emit_sync("translated", {
+            "uuid": session_id, "text": tran_text[:200]
+        })
+
+        # 4. Save SRT files
+        with open(orig_srt, "w", encoding="utf-8") as f:
+            f.write(_to_srt(segments, "ORIG"))
+        with open(tran_srt, "w", encoding="utf-8") as f:
+            f.write(_to_srt(translated_segments, "TRAN"))
+
+        # 5. Synthesize dubbed audio with edge-tts
+        import edge_tts
+        from pydub import AudioSegment
+        import asyncio
+
+        voice = _pick_voice(voice_type, target_lang)
+        duration_ms = int(len(pcm_data) / (sample_rate * channels * sample_width) * 1000)
+
+        async def _generate_dub():
+            track = AudioSegment.silent(duration=duration_ms)
+            last_end_ms = 0
+            for seg in translated_segments:
+                text = seg["text"].strip()
+                if not text or "[MUSIC]" in text.upper():
+                    continue
+                import uuid as _uuid_mod
+                tmp_p = os.path.join(tempfile.gettempdir(), f"tts_{_uuid_mod.uuid4()}.mp3")
+                try:
+                    await edge_tts.Communicate(text, voice).save(tmp_p)
+                    if not os.path.exists(tmp_p) or os.path.getsize(tmp_p) == 0:
+                        continue
+                    seg_audio = AudioSegment.from_file(tmp_p)
+                    start_ms = max(int(seg["start"] * 1000), last_end_ms)
+                    if len(track) < start_ms + len(seg_audio):
+                        track += AudioSegment.silent(
+                            duration=(start_ms + len(seg_audio)) - len(track)
+                        )
+                    track = track.overlay(seg_audio, position=start_ms)
+                    last_end_ms = start_ms + len(seg_audio)
+                except Exception:
+                    traceback.print_exc()
+                    continue
+                finally:
+                    if os.path.exists(tmp_p):
+                        os.unlink(tmp_p)
+            track.export(dub_mp3, format="mp3")
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_generate_dub())
+        finally:
+            loop.close()
+
+        print(f"[AudioSocket] TTS dubbed audio saved for session {session_id[:8]}")
+
+        # 6. Write result metadata
+        from datetime import datetime as _dt
+        result_path = os.path.join(out_dir, "result.json")
+        with open(result_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "status": "completed",
+                "orig_text": orig_text,
+                "tran_text": tran_text,
+                "completed": _dt.now(timezone.utc).isoformat()
+            }, f, ensure_ascii=False, indent=2)
+
+        _emit_sync("session_processed", {
+            "uuid": session_id,
+            "total_chunks": 1,
+            "duration_s": round(duration_s, 1)
+        })
+        print(f"[AudioSocket] Session {session_id[:8]} processing complete.")
 
     except Exception as e:
         traceback.print_exc()

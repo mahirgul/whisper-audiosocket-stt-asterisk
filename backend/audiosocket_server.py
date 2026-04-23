@@ -115,6 +115,7 @@ def load_config(config_path: str) -> dict:
         "input_channels": 1,
         "input_sample_width": 2,
         "send_silence_frames": False,
+        "vad_rms_threshold": 300,
         "vad_silence_threshold_ms": 1500,
         "vad_min_chunk_ms": 1000,
         "delivery": {
@@ -366,6 +367,7 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
             sample_width = cfg.get("input_sample_width", 2)
             do_swap = cfg.get("force_endian_swap", False)
             debug_enabled = cfg.get("debug_mode", False)
+            rms_threshold = cfg.get("vad_rms_threshold", 300)
 
         # Build a silence frame to send back to Asterisk (Optional)
         send_silence_enabled = cfg.get("send_silence_frames", False)
@@ -425,7 +427,7 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
                             payload = _swap_pcm16_endian(payload)
 
                         # RMS-based VAD (still track for debug stats)
-                        is_silent = _is_silent_frame(payload)
+                        is_silent = _is_silent_frame(payload, threshold=rms_threshold)
                         if is_silent:
                             stats["vad_stats"]["silent_frames"] += 1
                         else:
@@ -452,14 +454,15 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
                 if debug_enabled:
                     print(f"[AudioSocket] {session_id[:8]} reader task exiting")
 
-        # Run both tasks concurrently
-        silence_task = asyncio.create_task(_send_silence())
+        # Run reader task; silence task already created above if enabled
         await _read_audio()
-        silence_task.cancel()
-        try:
-            await silence_task
-        except asyncio.CancelledError:
-            pass
+
+        if silence_task is not None:
+            silence_task.cancel()
+            try:
+                await silence_task
+            except asyncio.CancelledError:
+                pass
 
         # Connection ended
         duration_s = (datetime.now(timezone.utc) - start_time).total_seconds()

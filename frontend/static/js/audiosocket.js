@@ -271,8 +271,10 @@ function applyConfigToForm(cfg) {
   setVal("cfgChannels",     cfg.input_channels);
   setVal("cfgSampleWidth",  cfg.input_sample_width);
   setVal("cfgSilence",      cfg.vad_silence_threshold_ms);
+  setVal("cfgRmsThreshold", cfg.vad_rms_threshold || 300);
   setVal("cfgMinChunk",     cfg.vad_min_chunk_ms);
   setChecked("cfgDebugMode", cfg.debug_mode || false);
+  setChecked("cfgSilenceFrames", cfg.send_silence_frames || false);
 
   const d = cfg.delivery || {};
   setChecked("cfgDeliveryEnabled", d.enabled);
@@ -298,8 +300,10 @@ function gatherConfig() {
     input_channels:           parseInt(getVal("cfgChannels")) || 1,
     input_sample_width:       parseInt(getVal("cfgSampleWidth")) || 2,
     vad_silence_threshold_ms: parseInt(getVal("cfgSilence")) || 1500,
+    vad_rms_threshold:        parseInt(getVal("cfgRmsThreshold")) || 300,
     vad_min_chunk_ms:         parseInt(getVal("cfgMinChunk")) || 1000,
     debug_mode:               getChecked("cfgDebugMode"),
+    send_silence_frames:      getChecked("cfgSilenceFrames"),
     delivery: {
       enabled:     getChecked("cfgDeliveryEnabled"),
       url:         getVal("cfgDeliveryUrl"),

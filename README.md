@@ -8,7 +8,8 @@ This version (V2) features a high-performance **Multi-Process Architecture**, of
 
 ## 🚀 Features
 
-- **Multi-Process AI Pipeline:** Dedicated model worker process manages a single Whisper instance (Small, Medium, or Large-v3) for all transcription tasks, preventing memory bloat and GIL contention.
+- **Multi-Process AI Pipeline:** Dedicated model worker process manages a single Whisper instance (Tiny, Base, Small, Medium, Large, or Turbo) for all transcription tasks, preventing memory bloat and GIL contention.
+- **Full Model Support:** Select any OpenAI Whisper model from the launcher, with built-in support for the high-performance **Turbo** model.
 - **GPU Acceleration:** Automatic CUDA detection for 5-10x faster transcription on compatible hardware.
 - **High-Performance Translation:** Optimized batched translation via **ArgosTranslate**, reducing processing time for long conversations.
 - **Secure File Handling:** Robust path traversal protection for all job and session management endpoints.

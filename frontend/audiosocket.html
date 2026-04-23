@@ -121,9 +121,22 @@
                 <input id="cfgSilence" type="number" value="1500">
               </div>
               <div class="form-group">
-                <label>Min Chunk Duration (ms)</label>
-                <input id="cfgMinChunk" type="number" value="1000">
+                <label>RMS Threshold (VAD)</label>
+                <input id="cfgRmsThreshold" type="number" value="300" min="0" max="32767">
               </div>
+            </div>
+            <div class="form-group">
+              <label>Min Chunk Duration (ms)</label>
+              <input id="cfgMinChunk" type="number" value="1000">
+            </div>
+
+            <!-- Silence Frames toggle -->
+            <div class="toggle-row">
+              <label for="cfgSilenceFrames">Send Silence (Keepalive)</label>
+              <label class="toggle">
+                <input type="checkbox" id="cfgSilenceFrames">
+                <span class="toggle-slider"></span>
+              </label>
             </div>
 
             <!-- Delivery toggle -->

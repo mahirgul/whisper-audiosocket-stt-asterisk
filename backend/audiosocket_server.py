@@ -115,13 +115,14 @@ def load_config(config_path: str) -> dict:
         "send_silence_frames": False,
         "vad_rms_threshold": 300,
         "vad_silence_threshold_ms": 5000,
+        "ignore_silence_timeout": False,
         "vad_min_chunk_ms": 1000,
         "ai_no_speech_threshold": 0.6,
         "ai_min_music_gap": 3.0,
         "silence_frame_ms": 20,
         "whisper": {
             "temperature": 0.0,
-            "log_prob_threshold": -1.0,
+            "logprob_threshold": -1.0,
             "no_speech_threshold": 0.6,
             "compression_ratio_threshold": 2.4,
             "condition_on_previous_text": True,
@@ -377,7 +378,11 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
             do_swap = cfg.get("force_endian_swap", False)
             debug_enabled = cfg.get("debug_mode", False)
             rms_threshold = cfg.get("vad_rms_threshold", 300)
-            silence_timeout_s = cfg.get("vad_silence_threshold_ms", 5000) / 1000.0
+            ignore_silence = cfg.get("ignore_silence_timeout", False)
+            if ignore_silence:
+                silence_timeout_s = None
+            else:
+                silence_timeout_s = cfg.get("vad_silence_threshold_ms", 5000) / 1000.0
 
         # Build a silence frame to send back to Asterisk (Optional)
         send_silence_enabled = cfg.get("send_silence_frames", False)
@@ -412,8 +417,9 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
                     frame_type, payload = await _read_frame(reader, timeout=silence_timeout_s)
                     if frame_type is None:
                         if debug_enabled:
-                            print(f"[AudioSocket] {session_id[:8]} reader: EOF or timeout")
-                        stats["termination_reason"] = "eof_timeout"
+                            msg = "timeout" if silence_timeout_s is not None else "EOF"
+                            print(f"[AudioSocket] {session_id[:8]} reader: {msg}")
+                        stats["termination_reason"] = "eof_timeout" if silence_timeout_s is not None else "eof"
                         break
                     if frame_type == FRAME_HANGUP:
                         if debug_enabled:
@@ -609,7 +615,11 @@ async def _read_uuid_frame(reader: asyncio.StreamReader) -> str | None:
     Returns UUID as a hex string, or None on failure.
     """
     with _config_lock:
-        timeout_s = _config.get("vad_silence_threshold_ms", 5000) / 1000.0
+        ignore_silence = _config.get("ignore_silence_timeout", False)
+        if ignore_silence:
+            timeout_s = None
+        else:
+            timeout_s = _config.get("vad_silence_threshold_ms", 5000) / 1000.0
 
     for _ in range(10):
         frame_type, payload = await _read_frame(reader, timeout=timeout_s)

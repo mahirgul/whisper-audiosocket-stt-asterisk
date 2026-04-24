@@ -8,7 +8,19 @@
   "vad_rms_threshold": 100,
   "vad_min_chunk_ms": 1000,
   "debug_mode": false,
+  "ignore_silence_timeout": true,
   "send_silence_frames": true,
+  "ai_no_speech_threshold": 0.6,
+  "ai_min_music_gap": 3,
+  "silence_frame_ms": 20,
+  "whisper": {
+    "temperature": 0,
+    "no_speech_threshold": 0.6,
+    "logprob_threshold": -1,
+    "compression_ratio_threshold": 2.4,
+    "condition_on_previous_text": true,
+    "initial_prompt": ""
+  },
   "delivery": {
     "enabled": false,
     "url": "http://your-server/api/receive-audio",
@@ -19,4 +31,4 @@
       "session_id": "{uuid}"
     }
   }
-  }
+}

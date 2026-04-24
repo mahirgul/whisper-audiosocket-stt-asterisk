@@ -257,6 +257,10 @@ def _worker_main(req_q: multiprocessing.Queue,
                         "task": "Transcribing..."})
 
             try:
+                # Determine FP16 based on device to suppress CPU warnings
+                if "fp16" not in options:
+                    options["fp16"] = (device == "cuda")
+
                 result = model.transcribe(audio_path, **options)
                 resp_q.put({
                     "type": "result",

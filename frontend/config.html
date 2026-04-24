@@ -152,6 +152,13 @@
             <input id="cfgMinChunk" type="number" value="1000">
           </div>
           <div class="toggle-row" style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 15px;">
+            <label for="cfgIgnoreSilence">Ignore Silence Timeout (Keep connection open even if silent)</label>
+            <label class="toggle">
+              <input type="checkbox" id="cfgIgnoreSilence">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="toggle-row" style="margin-top: 15px;">
             <label for="cfgSilenceFrames">Send Silence (Keepalive frames back to Asterisk)</label>
             <label class="toggle">
               <input type="checkbox" id="cfgSilenceFrames">

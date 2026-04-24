@@ -28,6 +28,7 @@ function applyConfigToForm(cfg) {
   setVal("cfgRmsThreshold", cfg.vad_rms_threshold || 300);
   setVal("cfgMinChunk",     cfg.vad_min_chunk_ms);
   setChecked("cfgDebugMode", cfg.debug_mode || false);
+  setChecked("cfgIgnoreSilence", cfg.ignore_silence_timeout || false);
   setChecked("cfgSilenceFrames", cfg.send_silence_frames || false);
 
   // Advanced AI
@@ -39,7 +40,7 @@ function applyConfigToForm(cfg) {
   const w = cfg.whisper || {};
   setVal("cfgWhisperTemp",      w.temperature ?? 0.0);
   setVal("cfgWhisperNoSpeech",  w.no_speech_threshold ?? 0.6);
-  setVal("cfgWhisperLogProb",   w.log_prob_threshold ?? -1.0);
+  setVal("cfgWhisperLogProb",   w.logprob_threshold ?? -1.0);
   setVal("cfgWhisperComp",      w.compression_ratio_threshold ?? 2.4);
   setVal("cfgWhisperPrompt",    w.initial_prompt ?? "");
   setChecked("cfgWhisperCondition", w.condition_on_previous_text ?? true);
@@ -70,6 +71,7 @@ function gatherConfig() {
     vad_rms_threshold:        parseInt(getVal("cfgRmsThreshold")) || 300,
     vad_min_chunk_ms:         parseInt(getVal("cfgMinChunk")) || 1000,
     debug_mode:               getChecked("cfgDebugMode"),
+    ignore_silence_timeout:   getChecked("cfgIgnoreSilence"),
     send_silence_frames:      getChecked("cfgSilenceFrames"),
     
     // Advanced AI
@@ -81,7 +83,7 @@ function gatherConfig() {
     whisper: {
       temperature:                parseFloat(getVal("cfgWhisperTemp")) || 0.0,
       no_speech_threshold:        parseFloat(getVal("cfgWhisperNoSpeech")) || 0.6,
-      log_prob_threshold:         parseFloat(getVal("cfgWhisperLogProb")) || -1.0,
+      logprob_threshold:          parseFloat(getVal("cfgWhisperLogProb")) || -1.0,
       compression_ratio_threshold: parseFloat(getVal("cfgWhisperComp")) || 2.4,
       condition_on_previous_text:  getChecked("cfgWhisperCondition"),
       initial_prompt:              getVal("cfgWhisperPrompt") || ""

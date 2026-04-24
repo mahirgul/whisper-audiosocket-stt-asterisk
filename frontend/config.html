@@ -231,6 +231,14 @@
         </div>
         <div class="card-body">
           <div class="form-group">
+            <label>Transcription Mode (Task)</label>
+            <select id="cfgWhisperTask">
+              <option value="transcribe">Transcribe (Same language)</option>
+              <option value="translate">Translate (To English)</option>
+            </select>
+            <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Whisper task: Transcribe or Translate to English.</div>
+          </div>
+          <div class="form-group" style="margin-top: 15px;">
             <label>Initial Prompt</label>
             <textarea id="cfgWhisperPrompt" style="width:100%;height:60px;border-radius:8px;border:1px solid var(--border);padding:8px;font-size:0.75rem;" placeholder="e.g. Technical meeting about AI..."></textarea>
             <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Context/vocabulary for the model.</div>

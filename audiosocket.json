@@ -19,7 +19,8 @@
     "logprob_threshold": -1,
     "compression_ratio_threshold": 2.4,
     "condition_on_previous_text": true,
-    "initial_prompt": ""
+    "initial_prompt": "",
+    "task": "transcribe"
   },
   "delivery": {
     "enabled": false,

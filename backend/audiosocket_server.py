@@ -121,6 +121,7 @@ def load_config(config_path: str) -> dict:
         "ai_min_music_gap": 3.0,
         "silence_frame_ms": 20,
         "whisper": {
+            "task": "transcribe",
             "temperature": 0.0,
             "logprob_threshold": -1.0,
             "no_speech_threshold": 0.6,

@@ -38,6 +38,7 @@ function applyConfigToForm(cfg) {
 
   // Whisper Transcription
   const w = cfg.whisper || {};
+  setVal("cfgWhisperTask",      w.task ?? "transcribe");
   setVal("cfgWhisperTemp",      w.temperature ?? 0.0);
   setVal("cfgWhisperNoSpeech",  w.no_speech_threshold ?? 0.6);
   setVal("cfgWhisperLogProb",   w.logprob_threshold ?? -1.0);
@@ -81,6 +82,7 @@ function gatherConfig() {
 
     // Whisper
     whisper: {
+      task:                       getVal("cfgWhisperTask") || "transcribe",
       temperature:                parseFloat(getVal("cfgWhisperTemp")) || 0.0,
       no_speech_threshold:        parseFloat(getVal("cfgWhisperNoSpeech")) || 0.6,
       logprob_threshold:          parseFloat(getVal("cfgWhisperLogProb")) || -1.0,

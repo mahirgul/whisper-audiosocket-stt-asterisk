@@ -199,10 +199,10 @@ def stop_server() -> None:
             asyncio.run_coroutine_threadsafe(_stop_tcp_force(), _loop).result(timeout=5)
         except Exception:
             pass
-            
+
     if _loop is not None:
         _loop.call_soon_threadsafe(_loop.stop)
-        
+
     if _thread is not None:
         _thread.join(timeout=2)
         

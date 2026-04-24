@@ -1,5 +1,7 @@
 # WASA — Whisper AudioSocket Asterisk (V2)
 
+> **⚠️ DISCLAMER: This is a demonstration/example project only and is not intended for production use without further security and performance hardening. ⚠️**
+
 > **✨ Developed & Optimized with Gemini ✨**
 > *This project has been significantly enhanced and maintained using Google Gemini CLI, ensuring modern coding standards and robust implementation.*
 

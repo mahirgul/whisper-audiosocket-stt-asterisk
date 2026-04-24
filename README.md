@@ -54,16 +54,22 @@ You can manage all settings via the **Config** tab in the Web UI. Key settings i
 ## 🛠 Installation & Setup
 
 ### Requirements
-- **OS:** Windows 10/11
+- **OS:** Windows 10/11 or Linux (Ubuntu/Debian recommended).
 - **Python:** 3.10+
 - **FFmpeg:** Required for audio encoding/decoding.
 - **NVIDIA GPU:** Recommended (with CUDA) for near real-time performance.
 
-### Quick Start
+### Quick Start (Windows)
 1. Run `install.bat` to setup the virtual environment and install dependencies.
 2. Run `run.bat` to launch the application.
-3. Select your desired Whisper model when prompted.
-4. Access the dashboard at `http://localhost:8000`.
+
+### Quick Start (Linux)
+1. Run `chmod +x *.sh` to make the scripts executable.
+2. Run `./install.sh` to setup the environment.
+3. Run `./run.sh` to launch the application.
+
+4. Select your desired Whisper model when prompted.
+5. Access the dashboard at `http://localhost:8000`.
 
 ---
 

@@ -24,7 +24,14 @@ import traceback
 import uuid as _uuid
 from datetime import datetime, timezone
 import wave
-import audioop
+try:
+    import audioop
+except ImportError:
+    try:
+        from audioop_lts import audioop
+    except ImportError:
+        print("[AudioSocket] ERROR: 'audioop' module not found. Please install 'audioop-lts' if using Python 3.13+.")
+        raise
 
 import audiosocket_processor
 import model_manager

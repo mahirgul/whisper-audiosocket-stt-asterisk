@@ -2,16 +2,16 @@ import os
 import time
 import uuid
 import asyncio
+import json
 from pydub import AudioSegment
 
 import model_manager
-import local_translator
 
 # ---------------------------------------------------------------------------
 # Module-level status variables (read/written by web.py)
 # ---------------------------------------------------------------------------
-model_status = "loading"
-current_task = "Waking up AI..."
+model_status = "idle"
+current_task = "Ready"
 
 def sync_status():
     """Sync model_manager status into module-level variables
@@ -19,6 +19,18 @@ def sync_status():
     global model_status, current_task
     model_status = model_manager.model_status
     current_task = model_manager.current_task
+
+def load_ai_config():
+    """Load AI specific thresholds from audiosocket.json."""
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cfg_path = os.path.join(base, "audiosocket.json")
+    if os.path.exists(cfg_path):
+        try:
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
 
 def to_srt(segments, tag=""):
     def ts(x):
@@ -29,11 +41,11 @@ def to_srt(segments, tag=""):
         srt.append(f"{i+1}\n{ts(s['start'])} --> {ts(s['end'])}\n{txt}\n")
     return "\n".join(srt)
 
-def process_segments_with_music(segments, min_gap=3.0):
+def process_segments_with_music(segments, min_gap=3.0, no_speech_threshold=0.6):
     processed = []
     if not segments: return processed
     for i, s in enumerate(segments):
-        if s.get('no_speech_prob', 0) > 0.6 or not s['text'].strip():
+        if s.get('no_speech_prob', 0) > no_speech_threshold or not s['text'].strip():
             s['text'] = "[MUSIC]"
         if i > 0:
             prev_end = processed[-1]['end']
@@ -44,9 +56,15 @@ def process_segments_with_music(segments, min_gap=3.0):
     return processed
 
 
-async def transcribe_audio(file_path, target_lang, output_dir="outputs"):
+async def transcribe_audio(file_path, output_dir="outputs"):
     if model_manager.model_status == "loading":
         raise Exception("AI Model is still loading. Please wait a moment...")
+
+    cfg = load_ai_config()
+    min_gap = cfg.get("ai_min_music_gap", 3.0)
+    no_speech_threshold = cfg.get("ai_no_speech_threshold", 0.6)
+    
+    whisper_opts = cfg.get("whisper", {})
 
     unique_id = str(uuid.uuid4())[:8]
     audio = AudioSegment.from_file(file_path)
@@ -60,58 +78,21 @@ async def transcribe_audio(file_path, target_lang, output_dir="outputs"):
     # Transcribe L & R via the shared model process
     l_path = file_path + "_l.wav"
     channels[0].export(l_path, format="wav")
-    res_l = await model_manager.transcribe_async(l_path)
+    res_l = await model_manager.transcribe_async(l_path, options=whisper_opts)
     os.unlink(l_path)
 
     r_path = file_path + "_r.wav"
     channels[1].export(r_path, format="wav")
-    res_r = await model_manager.transcribe_async(r_path)
+    res_r = await model_manager.transcribe_async(r_path, options=whisper_opts)
     os.unlink(r_path)
 
-    segs_l = process_segments_with_music(res_l.get('segments', []))
-    segs_r = process_segments_with_music(res_r.get('segments', []))
-
-    from_l = res_l.get('language', 'auto')
-    from_r = res_r.get('language', 'auto')
-
-    async def trans_segs(segs, from_code):
-        if not segs or from_code == target_lang:
-            return segs
-
-        # Identify which segments need translation vs [MUSIC]
-        texts_to_batch = []
-        mapping = [] # (original_index, text)
-        
-        for i, s in enumerate(segs):
-            txt = s['text'].strip()
-            if txt and txt != "[MUSIC]":
-                texts_to_batch.append(txt)
-                mapping.append(i)
-        
-        if not texts_to_batch:
-            return list(segs)
-
-        # Batch translate
-        translated_texts = await asyncio.to_thread(
-            local_translator.translate_batch, texts_to_batch, from_code, target_lang
-        )
-        
-        # Reconstruct segments
-        out = [dict(s) for s in segs]
-        for trans_txt, orig_idx in zip(translated_texts, mapping):
-            out[orig_idx]["text"] = trans_txt
-            
-        return out
-
-    t_l = await trans_segs(segs_l, from_l)
-    t_r = await trans_segs(segs_r, from_r)
+    segs_l = process_segments_with_music(res_l.get('segments', []), min_gap, no_speech_threshold)
+    segs_r = process_segments_with_music(res_r.get('segments', []), min_gap, no_speech_threshold)
 
     return {
         "unique_id": unique_id,
         "is_mono": original_channels == 1,
-        "t_l": t_l, "t_r": t_r,
         "orig_l_srt": to_srt(segs_l), "orig_r_srt": to_srt(segs_r),
-        "tran_l_srt": to_srt(t_l), "tran_r_srt": to_srt(t_r),
         "duration": total_ms
     }
 

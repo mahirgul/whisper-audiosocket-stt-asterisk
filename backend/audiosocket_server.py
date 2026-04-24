@@ -28,7 +28,6 @@ import audioop
 
 import audiosocket_processor
 import model_manager
-import local_translator
 
 # ---------------------------------------------------------------------------
 # Global state — thread-safe
@@ -110,20 +109,30 @@ def load_config(config_path: str) -> dict:
     """Load audiosocket.json; return defaults if file missing."""
     defaults = {
         "port": 9092,
-        "target_lang": "en",
         "input_sample_rate": 8000,
         "input_channels": 1,
         "input_sample_width": 2,
         "send_silence_frames": False,
         "vad_rms_threshold": 300,
-        "vad_silence_threshold_ms": 1500,
+        "vad_silence_threshold_ms": 5000,
         "vad_min_chunk_ms": 1000,
+        "ai_no_speech_threshold": 0.6,
+        "ai_min_music_gap": 3.0,
+        "silence_frame_ms": 20,
+        "whisper": {
+            "temperature": 0.0,
+            "log_prob_threshold": -1.0,
+            "no_speech_threshold": 0.6,
+            "compression_ratio_threshold": 2.4,
+            "condition_on_previous_text": True,
+            "initial_prompt": ""
+        },
         "delivery": {
             "enabled": False,
             "url": "http://your-server/api/receive-audio",
             "method": "POST",
             "field_name": "audio",
-            "extra_fields": {"session_id": "{uuid}", "lang": "{target_lang}"},
+            "extra_fields": {"session_id": "{uuid}"},
             "timeout_s": 10
         }
     }
@@ -368,12 +377,13 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
             do_swap = cfg.get("force_endian_swap", False)
             debug_enabled = cfg.get("debug_mode", False)
             rms_threshold = cfg.get("vad_rms_threshold", 300)
+            silence_timeout_s = cfg.get("vad_silence_threshold_ms", 5000) / 1000.0
 
         # Build a silence frame to send back to Asterisk (Optional)
         send_silence_enabled = cfg.get("send_silence_frames", False)
         silence_task = None
         if send_silence_enabled:
-            silence_frame_ms = 20
+            silence_frame_ms = cfg.get("silence_frame_ms", 20)
             silence_frame_bytes = (sample_rate * channels * sample_width * silence_frame_ms) // 1000
             silence_payload = b'\x00' * silence_frame_bytes
             silence_header = struct.pack("B", FRAME_AUDIO) + struct.pack(">H", silence_frame_bytes)
@@ -399,7 +409,7 @@ async def _connection_handler(reader: asyncio.StreamReader, writer: asyncio.Stre
                 print(f"[AudioSocket] Audio reader task started for {session_id[:8]}")
             try:
                 while connection_alive:
-                    frame_type, payload = await _read_frame(reader)
+                    frame_type, payload = await _read_frame(reader, timeout=silence_timeout_s)
                     if frame_type is None:
                         if debug_enabled:
                             print(f"[AudioSocket] {session_id[:8]} reader: EOF or timeout")
@@ -598,8 +608,11 @@ async def _read_uuid_frame(reader: asyncio.StreamReader) -> str | None:
     Read frames until we get the UUID frame (type 0x01).
     Returns UUID as a hex string, or None on failure.
     """
+    with _config_lock:
+        timeout_s = _config.get("vad_silence_threshold_ms", 5000) / 1000.0
+
     for _ in range(10):
-        frame_type, payload = await _read_frame(reader)
+        frame_type, payload = await _read_frame(reader, timeout=timeout_s)
         if frame_type is None:
             return None
         if frame_type == FRAME_UUID and len(payload) == 16:
@@ -647,15 +660,15 @@ def _process_session_blocking(session_id: str, pcm_data: bytes,
     try:
         with _config_lock:
             cfg = dict(_config)
+        
+        whisper_opts = cfg.get("whisper", {})
 
         sample_rate  = cfg.get("input_sample_rate", 8000)
         channels     = cfg.get("input_channels", 1)
         sample_width = cfg.get("input_sample_width", 2)
-        target_lang  = cfg.get("target_lang", "en")
 
         wav_path = os.path.join(out_dir, "chunk_001.wav")
         orig_srt = os.path.join(out_dir, "chunk_001_orig.srt")
-        tran_srt = os.path.join(out_dir, "chunk_001_tran.srt")
 
         _emit_sync("processing_started", {
             "uuid": session_id,
@@ -669,7 +682,7 @@ def _process_session_blocking(session_id: str, pcm_data: bytes,
         # 2. Transcribe via shared model process (thread-safe, blocking).
         # If another session is already transcribing, this call queues and waits.
         print(f"[AudioSocket] Queued for transcription: session {session_id[:8]}")
-        whisper_result = model_manager.transcribe(wav_path)
+        whisper_result = model_manager.transcribe(wav_path, options=whisper_opts)
         segments      = whisper_result.get("segments", [])
         detected_lang = whisper_result.get("language", "") or "en"
         orig_text     = " ".join(s["text"].strip() for s in segments)
@@ -680,34 +693,11 @@ def _process_session_blocking(session_id: str, pcm_data: bytes,
             "detected_lang": detected_lang
         })
 
-        # 3. Translate (offline — local_translator uses argostranslate)
-        translated_segments = []
-        if segments and target_lang and detected_lang != target_lang:
-            print(f"[AudioSocket] Translating {detected_lang}→{target_lang} "
-                  f"({len(segments)} segments) in batch ...")
-            
-            orig_texts = [seg["text"].strip() for seg in segments]
-            translated_texts = local_translator.translate_batch(orig_texts, detected_lang, target_lang)
-            
-            for seg, trans_txt in zip(segments, translated_texts):
-                translated_segments.append({**seg, "text": trans_txt})
-        else:
-            translated_segments = list(segments)
-
-        tran_text = " ".join(s["text"].strip() for s in translated_segments)
-        print(f"[AudioSocket] Translated: {tran_text[:100]}...")
-
-        _emit_sync("translated", {
-            "uuid": session_id, "text": tran_text[:200]
-        })
-
-        # 4. Save SRT files
+        # 3. Save SRT file
         with open(orig_srt, "w", encoding="utf-8") as f:
             f.write(_to_srt(segments))
-        with open(tran_srt, "w", encoding="utf-8") as f:
-            f.write(_to_srt(translated_segments))
 
-        # 5. REST Delivery (on_close mode delivery)
+        # 4. REST Delivery (on_close mode delivery)
         wav_bytes = audiosocket_processor.pcm_bytes_to_wav_bytes(pcm_data, sample_rate, channels, sample_width)
         status_code = audiosocket_processor.deliver_chunk_sync(wav_bytes, cfg, session_id, 1)
         if status_code > 0:
@@ -716,13 +706,12 @@ def _process_session_blocking(session_id: str, pcm_data: bytes,
                 "uuid": session_id, "chunk_idx": 1, "status_code": status_code
             })
 
-        # 6. Write result metadata
+        # 5. Write result metadata
         result_path = os.path.join(out_dir, "result.json")
         with open(result_path, "w", encoding="utf-8") as f:
             json.dump({
                 "status": "completed",
                 "orig_text": orig_text,
-                "tran_text": tran_text,
                 "completed": datetime.now(timezone.utc).isoformat()
             }, f, ensure_ascii=False, indent=2)
 

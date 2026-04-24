@@ -113,7 +113,7 @@ def stop() -> None:
     _response_queue = None
 
 
-def transcribe(audio_path: str, *, timeout: float = 300.0) -> dict:
+def transcribe(audio_path: str, *, timeout: float = 300.0, options: dict | None = None) -> dict:
     """
     Thread-safe transcription request.
 
@@ -138,7 +138,7 @@ def transcribe(audio_path: str, *, timeout: float = 300.0) -> dict:
         model_status = "processing"
         current_task = "Transcribing..."
 
-    _request_queue.put({"id": req_id, "audio_path": audio_path})
+    _request_queue.put({"id": req_id, "audio_path": audio_path, "options": options or {}})
 
     if not event.wait(timeout=timeout):
         with _pending_lock:
@@ -155,10 +155,10 @@ def transcribe(audio_path: str, *, timeout: float = 300.0) -> dict:
     return msg
 
 
-async def transcribe_async(audio_path: str, *, timeout: float = 300.0) -> dict:
+async def transcribe_async(audio_path: str, *, timeout: float = 300.0, options: dict | None = None) -> dict:
     """Async wrapper — runs transcribe() in a thread so it doesn't block the event loop."""
     import asyncio
-    return await asyncio.to_thread(transcribe, audio_path, timeout=timeout)
+    return await asyncio.to_thread(transcribe, audio_path, timeout=timeout, options=options)
 
 
 def is_ready() -> bool:
@@ -251,12 +251,13 @@ def _worker_main(req_q: multiprocessing.Queue,
 
             req_id = request["id"]
             audio_path = request["audio_path"]
+            options = request.get("options", {})
 
             resp_q.put({"type": "status", "status": "processing",
                         "task": "Transcribing..."})
 
             try:
-                result = model.transcribe(audio_path)
+                result = model.transcribe(audio_path, **options)
                 resp_q.put({
                     "type": "result",
                     "id": req_id,

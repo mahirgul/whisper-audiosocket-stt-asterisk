@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configuration — WASA</title>
+  <meta name="description" content="Configure WASA (Whisper AudioSocket Asterisk) settings.">
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/audiosocket.css">
+  <style>
+    .config-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      gap: 24px;
+      margin-top: 24px;
+    }
+    .config-card {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    .config-card .card-body {
+      flex: 1;
+    }
+    .save-bar {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: flex-end;
+      padding: 16px;
+      background: var(--surface);
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      position: sticky;
+      bottom: 20px;
+      z-index: 100;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .section-title {
+      font-size: 0.75rem;
+      font-weight: 900;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+  </style>
+  <script src="/static/js/config.js" defer></script>
+</head>
+
+<body>
+
+  <!-- Shared topbar navigation -->
+  <nav class="topbar">
+    <a href="https://mhrgl.com" target="_blank" class="topbar-brand">
+      <div class="brand-icon">🎙</div>
+      <div>
+        <div class="brand-name">WASA</div>
+        <div class="brand-sub">Whisper AudioSocket Asterisk</div>
+      </div>
+    </a>
+    <div class="topbar-divider"></div>
+    <div class="topbar-nav">
+      <a href="/"><span class="nav-icon">🎛</span> Studio</a>
+      <a href="/audiosocket.html"><span class="nav-icon">📡</span> AudioSocket</a>
+      <a href="/config.html" class="active"><span class="nav-icon">⚙️</span> Config</a>
+    </div>
+  </nav>
+
+  <div class="container" style="max-width: 1400px; grid-template-columns: 1fr; display: block; margin-top: 20px;">
+    
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <h1 style="font-size: 1.5rem; font-weight: 900; letter-spacing: -0.5px;">⚙️ System Settings</h1>
+        <button class="btn btn-primary" onclick="saveConfig()">SAVE ALL SETTINGS</button>
+    </div>
+    <p style="color: var(--muted); font-size: 0.85rem; margin-bottom: 24px;">Manage your AudioSocket server, VAD parameters, and webhook delivery options.</p>
+
+    <div class="config-grid">
+      
+      <!-- 1. AudioSocket Server -->
+      <div class="card config-card">
+        <div class="card-header">
+          <div class="section-title">📡 AudioSocket Server</div>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label>Listen Port</label>
+            <input id="cfgPort" type="number" value="9092" min="1024" max="65535">
+          </div>
+          <div class="form-group" style="margin-top: 15px;">
+            <label>Transcription Mode</label>
+            <select id="cfgTransMode">
+              <option value="on_close">On Close (Process full audio after hangup)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Input Format -->
+      <div class="card config-card">
+        <div class="card-header">
+          <div class="section-title">🔊 Input Format (PCM)</div>
+        </div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Sample Rate (Hz)</label>
+              <input id="cfgSampleRate" type="number" value="8000">
+            </div>
+            <div class="form-group">
+              <label>Channels</label>
+              <input id="cfgChannels" type="number" value="1" min="1" max="2">
+            </div>
+          </div>
+          <div class="form-group" style="margin-top: 15px;">
+            <label>Sample Width (bytes, 1/2/4)</label>
+            <input id="cfgSampleWidth" type="number" value="2" min="1" max="4">
+          </div>
+          <div class="toggle-row" style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 15px;">
+            <label for="cfgDebugMode">Debug Mode (Enable verbose logging & extra stats)</label>
+            <label class="toggle">
+              <input type="checkbox" id="cfgDebugMode">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. VAD -->
+      <div class="card config-card">
+        <div class="card-header">
+          <div class="section-title">🎙 Voice Activity Detection</div>
+        </div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Silence Threshold (ms)</label>
+              <input id="cfgSilence" type="number" value="5000">
+            </div>
+            <div class="form-group">
+              <label>RMS Threshold (Volume)</label>
+              <input id="cfgRmsThreshold" type="number" value="300" min="0" max="32767">
+            </div>
+          </div>
+          <div class="form-group" style="margin-top: 15px;">
+            <label>Min Chunk Duration (ms)</label>
+            <input id="cfgMinChunk" type="number" value="1000">
+          </div>
+          <div class="toggle-row" style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 15px;">
+            <label for="cfgSilenceFrames">Send Silence (Keepalive frames back to Asterisk)</label>
+            <label class="toggle">
+              <input type="checkbox" id="cfgSilenceFrames">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. External Delivery -->
+      <div class="card config-card">
+        <div class="card-header">
+          <div class="section-title">🌐 External Delivery</div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgDeliveryEnabled" onchange="toggleDeliverySection(this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="card-body">
+          <div id="deliverySection" style="display:none;">
+            <div class="form-group">
+              <label>Endpoint URL</label>
+              <input id="cfgDeliveryUrl" type="url" placeholder="http://your-server/api/receive-audio">
+            </div>
+            <div class="form-row" style="margin-top: 15px;">
+              <div class="form-group">
+                <label>HTTP Method</label>
+                <select id="cfgDeliveryMethod">
+                  <option value="POST">POST</option>
+                  <option value="PUT">PUT</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>File Field Name</label>
+                <input id="cfgDeliveryField" type="text" value="audio">
+              </div>
+            </div>
+            <div class="form-group" style="margin-top: 15px;">
+              <label>Timeout (seconds)</label>
+              <input id="cfgDeliveryTimeout" type="number" value="10">
+            </div>
+            <div class="form-group" style="margin-top: 15px;">
+              <label>Extra Fields (JSON) — use {uuid}</label>
+              <textarea id="cfgDeliveryExtra"
+                style="width:100%;height:80px;border-radius:8px;border:1px solid var(--border);padding:8px;font-family:monospace;font-size:0.72rem;">{"session_id": "{uuid}"}</textarea>
+            </div>
+          </div>
+          <div id="deliveryPlaceholder" style="text-align: center; color: var(--muted); padding: 40px 0;">
+             Webhook delivery is currently disabled.
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. Transcription -->
+      <div class="card config-card">
+        <div class="card-header">
+          <div class="section-title">📝 Transcription</div>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label>Initial Prompt</label>
+            <textarea id="cfgWhisperPrompt" style="width:100%;height:60px;border-radius:8px;border:1px solid var(--border);padding:8px;font-size:0.75rem;" placeholder="e.g. Technical meeting about AI..."></textarea>
+            <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Context/vocabulary for the model.</div>
+          </div>
+          <div class="form-row" style="margin-top: 15px;">
+            <div class="form-group">
+              <label>Temperature (0.0 - 1.0)</label>
+              <input id="cfgWhisperTemp" type="number" step="0.1" min="0" max="1" value="0.0">
+            </div>
+            <div class="form-group">
+              <label>No Speech Threshold</label>
+              <input id="cfgWhisperNoSpeech" type="number" step="0.1" min="0" max="1" value="0.6">
+            </div>
+          </div>
+          <div class="form-row" style="margin-top: 15px;">
+            <div class="form-group">
+              <label>Log Prob Threshold</label>
+              <input id="cfgWhisperLogProb" type="number" step="0.1" value="-1.0">
+            </div>
+            <div class="form-group">
+              <label>Compression Ratio</label>
+              <input id="cfgWhisperComp" type="number" step="0.1" value="2.4">
+            </div>
+          </div>
+          <div class="toggle-row" style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 15px;">
+            <label for="cfgWhisperCondition">Condition on previous text</label>
+            <label class="toggle">
+              <input type="checkbox" id="cfgWhisperCondition" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. Advanced AI Settings -->
+      <div class="card config-card">
+        <div class="card-header">
+          <div class="section-title">🤖 Advanced System Settings</div>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label>AI Music Detection (0.0 - 1.0)</label>
+            <input id="cfgAiNoSpeech" type="number" step="0.1" min="0" max="1" value="0.6">
+            <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Used for [MUSIC] tag generation.</div>
+          </div>
+          <div class="form-group" style="margin-top: 15px;">
+            <label>Min Silence for [MUSIC] (sec)</label>
+            <input id="cfgAiMinGap" type="number" step="0.5" min="0" value="3.0">
+          </div>
+          <div class="form-group" style="margin-top: 15px;">
+            <label>Silence Frame Duration (ms)</label>
+            <input id="cfgSilenceFrameMs" type="number" step="10" min="10" max="1000" value="20">
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <footer>
+    <div class="footer-content">
+      <div class="footer-brand">
+        <span class="footer-icon">🎙</span>
+        <span>WASA</span>
+      </div>
+      <div class="footer-links">
+        <a href="https://mhrgl.com" target="_blank">© 2026 MHRGL.COM</a>
+        <span class="footer-sep"></span>
+        <a href="https://mhrgl.com" target="_blank">Support</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+
+</html>

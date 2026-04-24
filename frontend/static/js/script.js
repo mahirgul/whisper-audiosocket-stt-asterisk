@@ -175,8 +175,6 @@ function loadFromHistory(idx, el) {
     if(item.meta) {
         document.getElementById('boxOL').innerText = item.meta.orig_l || "";
         document.getElementById('boxOR').innerText = item.meta.orig_r || "";
-        document.getElementById('boxTL').innerText = item.meta.tran_l || "";
-        document.getElementById('boxTR').innerText = item.meta.tran_r || "";
         document.getElementById('resultsGrid').style.display = 'grid';
     }
     initWavesurfer(item.url + "?t=" + Date.now());
@@ -193,15 +191,11 @@ async function start() {
 }
 
 async function handleProcessing(endpoint, payload) {
-    const lang = document.getElementById('targetLang').value;
-    
     document.getElementById('setupArea').style.display = 'none';
     document.getElementById('resultsGrid').style.display = 'none';
     document.getElementById('playerCard').style.display = 'none';
     document.getElementById('boxOL').innerText = "...";
     document.getElementById('boxOR').innerText = "...";
-    document.getElementById('boxTL').innerText = "...";
-    document.getElementById('boxTR').innerText = "...";
 
     const bar = document.getElementById('loadingBar');
     bar.style.display = 'block';
@@ -209,7 +203,6 @@ async function handleProcessing(endpoint, payload) {
 
     const fd = new FormData();
     for(let key in payload) fd.append(key, payload[key]);
-    fd.append('target_lang', lang);
 
     try {
         const res = await fetch(endpoint, { method: 'POST', body: fd });
@@ -218,8 +211,6 @@ async function handleProcessing(endpoint, payload) {
 
         document.getElementById('boxOL').innerText = data.orig_l;
         document.getElementById('boxOR').innerText = data.orig_r;
-        document.getElementById('boxTL').innerText = data.tran_l;
-        document.getElementById('boxTR').innerText = data.tran_r;
         document.getElementById('resultsGrid').style.display = 'grid';
 
         if (data.audio_url) {

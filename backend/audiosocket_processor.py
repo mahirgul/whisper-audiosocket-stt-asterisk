@@ -14,7 +14,6 @@ import traceback
 import json
 import aiohttp
 import time as _time
-import local_translator
 
 import model_manager
 
@@ -53,11 +52,11 @@ def to_srt(segments: list, tag: str = "") -> str:
     return "\n".join(srt)
 
 
-def build_extra_fields(extra_fields: dict, uuid_str: str, target_lang: str) -> dict:
+def build_extra_fields(extra_fields: dict, uuid_str: str) -> dict:
     result = {}
     for k, v in extra_fields.items():
         if isinstance(v, str):
-            v = v.replace("{uuid}", uuid_str).replace("{target_lang}", target_lang)
+            v = v.replace("{uuid}", uuid_str)
         result[k] = v
     return result
 
@@ -76,7 +75,7 @@ async def deliver_chunk(wav_bytes: bytes, config: dict, session_id: str, chunk_i
     method = d.get("method", "POST").upper()
     field_name = d.get("field_name", "audio")
     timeout_s = d.get("timeout_s", 10)
-    extra = build_extra_fields(d.get("extra_fields", {}), session_id, config.get("target_lang", "en"))
+    extra = build_extra_fields(d.get("extra_fields", {}), session_id)
     
     # Add metadata
     extra["chunk_index"] = str(chunk_idx)

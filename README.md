@@ -1,8 +1,8 @@
-# Stereo Transcribe & Translate Pro - V2
+# WASA — Whisper AudioSocket Asterisk (V2)
 
 > **✨ Made with Gemini ✨**
 
-An AI-powered stereo audio processing tool that transcribes and translates audio with independent channel control. Features real-time **Asterisk AudioSocket** integration for live transcription and offline translation using ArgosTranslate.
+An AI-powered stereo audio processing tool that transcribes audio with independent channel control. Features real-time **Asterisk AudioSocket** integration for live transcription.
 
 This version (V2) features a high-performance **Multi-Process Architecture**, offloading heavy AI inference to a dedicated worker process to ensure the web UI and real-time sockets remain responsive.
 
@@ -11,7 +11,6 @@ This version (V2) features a high-performance **Multi-Process Architecture**, of
 - **Multi-Process AI Pipeline:** Dedicated model worker process manages a single Whisper instance (Tiny, Base, Small, Medium, Large, or Turbo) for all transcription tasks, preventing memory bloat and GIL contention.
 - **Full Model Support:** Select any OpenAI Whisper model from the launcher, with built-in support for the high-performance **Turbo** model.
 - **GPU Acceleration:** Automatic CUDA detection for 5-10x faster transcription on compatible hardware.
-- **High-Performance Translation:** Optimized batched translation via **ArgosTranslate**, reducing processing time for long conversations.
 - **Secure File Handling:** Robust path traversal protection for all job and session management endpoints.
 - **Stereo Processing:** Automatically splits Left and Right channels to process them independently, perfect for call recordings with agent/customer on separate tracks.
 - **Smart AudioSocket Listener:** Real-time TCP server accepting Asterisk AudioSocket connections (SLIN 8000Hz) with improved VAD accuracy.
@@ -35,7 +34,7 @@ This version (V2) features a high-performance **Multi-Process Architecture**, of
 Run `install.bat` to automate the environment setup:
 1. Installs Python and FFmpeg via `winget` (if missing).
 2. Creates a virtual environment (`venv/`).
-3. Installs dependencies: `fastapi`, `uvicorn`, `openai-whisper`, `argostranslate`, `pydub`, `psutil`, `audioop-lts`.
+3. Installs dependencies: `fastapi`, `uvicorn`, `openai-whisper`, `pydub`, `psutil`, `audioop-lts`.
 4. Initializes model and output directories.
 
 ---
@@ -65,7 +64,7 @@ Acting as a real-time AudioSocket server for Asterisk:
 1. **Protocol:** Handles `0x01` (UUID), `0x10` (Audio), and `0x00` (Hangup) frames.
 2. **Buffering:** Collects raw PCM bytes during the call.
 3. **Queueing:** Upon hangup, the session is added to a background queue.
-4. **Processing:** The worker converts PCM to WAV → Transcribes → Translates → Saves SRTs.
+4. **Processing:** The worker converts PCM to WAV → Transcribes → Saves SRTs.
 5. **Monitoring:** View live connection stats and VAD metrics in the "AudioSocket" tab.
 
 ### Configuration (`audiosocket.json`)
@@ -73,7 +72,6 @@ Acting as a real-time AudioSocket server for Asterisk:
 ```json
 {
   "port": 9092,
-  "target_lang": "en",
   "send_silence_frames": false,
   "force_endian_swap": false,
   "delivery": {
@@ -106,7 +104,6 @@ Acting as a real-time AudioSocket server for Asterisk:
 - `backend/model_manager.py`: Manages the Whisper worker process (CUDA enabled).
 - `backend/audiosocket_server.py`: Async TCP AudioSocket implementation.
 - `backend/processor.py`: Stereo splitting and transcription logic.
-- `backend/local_translator.py`: Batched offline translation via ArgosTranslate.
 - `frontend/`: HTML5/JS/CSS UI using WaveSurfer.js.
 
 ---

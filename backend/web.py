@@ -96,7 +96,7 @@ def get_safe_path(base_dir, user_input, is_file=True):
 async def get_stats(): return job_stats
 
 @app.post("/transcribe")
-async def transcribe(file: UploadFile = File(...), target_lang: str = Form("en")):
+async def transcribe(file: UploadFile = File(...)):
     job_id = str(uuid.uuid4())
     fd, tmp_path = tempfile.mkstemp(suffix=".wav")
     os.close(fd)
@@ -108,15 +108,13 @@ async def transcribe(file: UploadFile = File(...), target_lang: str = Form("en")
         shutil.copy2(tmp_path, out_wav)
         audio_url = f"/outputs/{job_id}.wav"
 
-        results = await processor.transcribe_audio(tmp_path, target_lang, output_dir=OUTPUT_DIR)
+        results = await processor.transcribe_audio(tmp_path, output_dir=OUTPUT_DIR)
         
         # Save metadata for history
         meta = {
             "job_id": job_id,
             "audio_url": audio_url,
-            "lang": target_lang,
             "orig_l": results["orig_l_srt"], "orig_r": results["orig_r_srt"],
-            "tran_l": results["tran_l_srt"], "tran_r": results["tran_r_srt"],
             "time": time.time()
         }
         with open(os.path.join(OUTPUT_DIR, f"{job_id}.json"), "w", encoding="utf-8") as f:
@@ -125,8 +123,7 @@ async def transcribe(file: UploadFile = File(...), target_lang: str = Form("en")
         return {
             "job_id": job_id,
             "audio_url": audio_url,
-            "orig_l": results["orig_l_srt"], "orig_r": results["orig_r_srt"],
-            "tran_l": results["tran_l_srt"], "tran_r": results["tran_r_srt"]
+            "orig_l": results["orig_l_srt"], "orig_r": results["orig_r_srt"]
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -240,7 +237,6 @@ async def as_sessions(page: int = 1, limit: int = 20):
                     "completed": meta.get("completed"),
                     "total_chunks": meta.get("total_chunks", 0),
                     "duration_s": meta.get("duration_s"),
-                    "target_lang": meta.get("config", {}).get("target_lang", "?"),
                 })
 
     sessions.sort(key=lambda x: x.get("started") or "", reverse=True)
@@ -279,8 +275,7 @@ async def as_session_detail(session_uuid: str):
     for idx in chunk_indices:
         name = f"chunk_{idx:03d}"
         chunk_info = {"index": idx}
-        for suffix, key in [("_orig.srt", "orig_srt"), ("_tran.srt", "tran_srt"),
-                             (".wav", "wav")]:
+        for suffix, key in [("_orig.srt", "orig_srt"), (".wav", "wav")]:
             fn = name + suffix
             if fn in files:
                 chunk_info[key] = f"/audiosocket-files/{session_uuid}/{fn}"

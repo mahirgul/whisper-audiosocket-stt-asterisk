@@ -16,7 +16,6 @@ let openSessionUuid = null;
 // Bootstrap
 // ---------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
-  loadConfig();
   loadStatus();
   loadHistory(1);
   connectSSE();
@@ -72,21 +71,7 @@ function handleSSEEvent(eventType, data) {
 
     case "transcribed":
       if (activeConnections[data.uuid]) {
-        activeConnections[data.uuid].stage = `Transcribed chunk #${data.chunk_idx}`;
-        renderActiveConnections();
-      }
-      break;
-
-    case "translated":
-      if (activeConnections[data.uuid]) {
-        activeConnections[data.uuid].stage = `Translated chunk #${data.chunk_idx}`;
-        renderActiveConnections();
-      }
-      break;
-
-    case "dubbed":
-      if (activeConnections[data.uuid]) {
-        activeConnections[data.uuid].stage = `Dubbed chunk #${data.chunk_idx}`;
+        activeConnections[data.uuid].stage = `Transcribed`;
         renderActiveConnections();
       }
       break;
@@ -122,7 +107,7 @@ function handleSSEEvent(eventType, data) {
 
     case "processing_started":
       if (activeConnections[data.uuid]) {
-        activeConnections[data.uuid].stage = "🔄 Transcribing & translating…";
+        activeConnections[data.uuid].stage = "🔄 Transcribing audio…";
         renderActiveConnections();
       }
       break;
@@ -238,6 +223,9 @@ async function loadStatus() {
       `;
     }
 
+    const portLbl = document.getElementById("serverPortLabel");
+    if (portLbl) portLbl.textContent = s.port;
+
     const cnt = document.getElementById("activeCount");
     if (cnt) cnt.textContent = s.active_connections;
 
@@ -248,92 +236,6 @@ async function loadStatus() {
       badge.innerHTML = `<span class="dot"></span> Unreachable`;
     }
   }
-}
-
-// ---------------------------------------------------------------------------
-// Configuration
-// ---------------------------------------------------------------------------
-async function loadConfig() {
-  try {
-    const r = await fetch("/audiosocket/config");
-    const cfg = await r.json();
-    applyConfigToForm(cfg);
-  } catch (e) {
-    showToast("Failed to load config", "error");
-  }
-}
-
-function applyConfigToForm(cfg) {
-  setVal("cfgPort",         cfg.port);
-  setVal("cfgLang",         cfg.target_lang);
-  setVal("cfgTransMode",    "on_close");
-  setVal("cfgSampleRate",   cfg.input_sample_rate);
-  setVal("cfgChannels",     cfg.input_channels);
-  setVal("cfgSampleWidth",  cfg.input_sample_width);
-  setVal("cfgSilence",      cfg.vad_silence_threshold_ms);
-  setVal("cfgRmsThreshold", cfg.vad_rms_threshold || 300);
-  setVal("cfgMinChunk",     cfg.vad_min_chunk_ms);
-  setChecked("cfgDebugMode", cfg.debug_mode || false);
-  setChecked("cfgSilenceFrames", cfg.send_silence_frames || false);
-
-  const d = cfg.delivery || {};
-  setChecked("cfgDeliveryEnabled", d.enabled);
-  setVal("cfgDeliveryUrl",     d.url);
-  setVal("cfgDeliveryMethod",  d.method);
-  setVal("cfgDeliveryField",   d.field_name);
-  setVal("cfgDeliveryTimeout", d.timeout_s);
-  setVal("cfgDeliveryExtra",
-    JSON.stringify(d.extra_fields || {}, null, 2));
-
-  toggleDeliverySection(d.enabled);
-}
-
-function gatherConfig() {
-  let extraFields = {};
-  try { extraFields = JSON.parse(getVal("cfgDeliveryExtra") || "{}"); } catch (_) {}
-
-  return {
-    port:                     parseInt(getVal("cfgPort")) || 9092,
-    target_lang:              getVal("cfgLang") || "en",
-    transcription_mode:       getVal("cfgTransMode") || "instant",
-    input_sample_rate:        parseInt(getVal("cfgSampleRate")) || 8000,
-    input_channels:           parseInt(getVal("cfgChannels")) || 1,
-    input_sample_width:       parseInt(getVal("cfgSampleWidth")) || 2,
-    vad_silence_threshold_ms: parseInt(getVal("cfgSilence")) || 1500,
-    vad_rms_threshold:        parseInt(getVal("cfgRmsThreshold")) || 300,
-    vad_min_chunk_ms:         parseInt(getVal("cfgMinChunk")) || 1000,
-    debug_mode:               getChecked("cfgDebugMode"),
-    send_silence_frames:      getChecked("cfgSilenceFrames"),
-    delivery: {
-      enabled:     getChecked("cfgDeliveryEnabled"),
-      url:         getVal("cfgDeliveryUrl"),
-      method:      getVal("cfgDeliveryMethod") || "POST",
-      field_name:  getVal("cfgDeliveryField")  || "audio",
-      timeout_s:   parseInt(getVal("cfgDeliveryTimeout")) || 10,
-      extra_fields: extraFields,
-    }
-  };
-}
-
-async function saveConfig() {
-  const cfg = gatherConfig();
-  try {
-    const r = await fetch("/audiosocket/config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(cfg)
-    });
-    if (!r.ok) throw new Error(await r.text());
-    showToast("Configuration saved & server restarted", "success");
-    setTimeout(loadStatus, 1000);
-  } catch (e) {
-    showToast("Save failed: " + e.message, "error");
-  }
-}
-
-function toggleDeliverySection(enabled) {
-  const sec = document.getElementById("deliverySection");
-  if (sec) sec.style.display = enabled ? "block" : "none";
 }
 
 // ---------------------------------------------------------------------------
@@ -435,21 +337,17 @@ async function loadSessionDetail(uuid, container) {
     const chunksHtml = data.chunks.map(chunk => {
       const origText = chunk.orig_srt_content
         ? extractTextFromSrt(chunk.orig_srt_content) : "–";
-      const tranText = chunk.tran_srt_content
-        ? extractTextFromSrt(chunk.tran_srt_content) : "–";
 
       const links = [
         chunk.wav      ? `<a class="chunk-link" href="${chunk.wav}" target="_blank">WAV</a>` : "",
         chunk.orig_srt ? `<a class="chunk-link" href="${chunk.orig_srt}" target="_blank">ORIG SRT</a>` : "",
-        chunk.tran_srt ? `<a class="chunk-link" href="${chunk.tran_srt}" target="_blank">TRAN SRT</a>` : "",
       ].filter(Boolean).join("");
 
       return `
         <div class="chunk-item">
           <div class="chunk-idx">CHUNK #${String(chunk.index).padStart(3, "0")}</div>
           <div class="chunk-text">
-            <strong>Original:</strong> ${escHtml(origText)}<br>
-            <strong>Translated:</strong> ${escHtml(tranText)}
+            <strong>Text:</strong> ${escHtml(origText)}
           </div>
           <div class="chunk-actions">${links}</div>
         </div>`;

@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AudioSocket Monitor — Stereo Transcribe Pro V2</title>
+  <title>AudioSocket Monitor — WASA</title>
   <meta name="description"
     content="Real-time Asterisk AudioSocket monitor: live connections, transcription and offline translation.">
   <link rel="icon" href="/favicon.ico" type="image/x-icon">
@@ -22,14 +22,15 @@
     <a href="https://mhrgl.com" target="_blank" class="topbar-brand">
       <div class="brand-icon">🎙</div>
       <div>
-        <div class="brand-name">Stereo Transcribe</div>
-        <div class="brand-sub">mhrgl.com &middot; V2</div>
+        <div class="brand-name">WASA</div>
+        <div class="brand-sub">Whisper AudioSocket Asterisk</div>
       </div>
     </a>
     <div class="topbar-divider"></div>
     <div class="topbar-nav">
-      <a href="/"><span class="nav-icon">🎛</span> Transcription Studio</a>
+      <a href="/"><span class="nav-icon">🎛</span> Studio</a>
       <a href="/audiosocket.html" class="active"><span class="nav-icon">📡</span> AudioSocket</a>
+      <a href="/config.html"><span class="nav-icon">⚙️</span> Config</a>
     </div>
     <div class="topbar-right">
       <span id="serverStatus" class="status-badge stopped">
@@ -41,150 +42,12 @@
   <!-- ── Main layout ─────────────────────────────────────────── -->
   <div class="as-layout">
 
-    <!-- ── LEFT: Configuration ────────────────────────────────── -->
+    <!-- ── LEFT: Server Info ────────────────────────────────── -->
     <div>
       <div class="card" style="margin-bottom:16px;">
         <div class="card-header">
-          Configuration
-          <button class="btn btn-primary btn-sm" onclick="saveConfig()">Save &amp; Apply</button>
+          Server Quick Info
         </div>
-        <div class="card-body">
-          <div class="config-form">
-
-            <div class="form-group">
-              <label>Listen Port</label>
-              <input id="cfgPort" type="number" value="9092" min="1024" max="65535">
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label>Target Language</label>
-                <select id="cfgLang">
-                  <option value="en">English</option>
-                  <option value="tr">Turkish</option>
-                  <option value="de">German</option>
-                  <option value="fr">French</option>
-                  <option value="es">Spanish</option>
-                  <option value="it">Italian</option>
-                  <option value="ru">Russian</option>
-                  <option value="ar">Arabic</option>
-                  <option value="zh">Chinese</option>
-                  <option value="ja">Japanese</option>
-                  <option value="ko">Korean</option>
-                  <option value="pt">Portuguese</option>
-                  <option value="hi">Hindi</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Transcription Mode</label>
-                <select id="cfgTransMode">
-                  <option value="on_close">On Close (Full audio)</option>
-                </select>
-              </div>
-            </div>
-
-            <div
-              style="font-size:0.62rem;font-weight:800;color:#94a3b8;text-transform:uppercase;margin-top:4px;margin-bottom:6px;">
-              Input Format (PCM)
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Sample Rate (Hz)</label>
-                <input id="cfgSampleRate" type="number" value="8000">
-              </div>
-              <div class="form-group">
-                <label>Channels</label>
-                <input id="cfgChannels" type="number" value="1" min="1" max="2">
-              </div>
-            </div>
-            <div class="form-group">
-              <label>Sample Width (bytes, 1/2/4)</label>
-              <input id="cfgSampleWidth" type="number" value="2" min="1" max="4">
-            </div>
-
-            <!-- Debug Mode toggle -->
-            <div class="toggle-row">
-              <label for="cfgDebugMode">Debug Mode (Stats &amp; Logs)</label>
-              <label class="toggle">
-                <input type="checkbox" id="cfgDebugMode">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-
-            <div
-              style="font-size:0.62rem;font-weight:800;color:#94a3b8;text-transform:uppercase;margin-top:4px;margin-bottom:6px;">
-              Voice Activity Detection
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Silence Threshold (ms)</label>
-                <input id="cfgSilence" type="number" value="1500">
-              </div>
-              <div class="form-group">
-                <label>RMS Threshold (VAD)</label>
-                <input id="cfgRmsThreshold" type="number" value="300" min="0" max="32767">
-              </div>
-            </div>
-            <div class="form-group">
-              <label>Min Chunk Duration (ms)</label>
-              <input id="cfgMinChunk" type="number" value="1000">
-            </div>
-
-            <!-- Silence Frames toggle -->
-            <div class="toggle-row">
-              <label for="cfgSilenceFrames">Send Silence (Keepalive)</label>
-              <label class="toggle">
-                <input type="checkbox" id="cfgSilenceFrames">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-
-            <!-- Delivery toggle -->
-            <div class="toggle-row">
-              <label for="cfgDeliveryEnabled">REST Delivery</label>
-              <label class="toggle">
-                <input type="checkbox" id="cfgDeliveryEnabled" onchange="toggleDeliverySection(this.checked)">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-
-            <!-- Delivery section (hidden until toggle enabled) -->
-            <div id="deliverySection" style="display:none;">
-              <div class="form-group">
-                <label>Endpoint URL</label>
-                <input id="cfgDeliveryUrl" type="url" placeholder="http://your-server/api/receive-audio">
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>HTTP Method</label>
-                  <select id="cfgDeliveryMethod">
-                    <option value="POST">POST</option>
-                    <option value="PUT">PUT</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label>File Field Name</label>
-                  <input id="cfgDeliveryField" type="text" value="audio">
-                </div>
-              </div>
-              <div class="form-group">
-                <label>Timeout (seconds)</label>
-                <input id="cfgDeliveryTimeout" type="number" value="10">
-              </div>
-              <div class="form-group">
-                <label>Extra Fields (JSON) — use {uuid}, {target_lang}</label>
-                <textarea id="cfgDeliveryExtra"
-                  style="width:100%;height:80px;border-radius:8px;border:1px solid var(--border);padding:8px;font-family:monospace;font-size:0.72rem;">{"session_id": "{uuid}", "lang": "{target_lang}"}</textarea>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </div>
-
-      <!-- Server info -->
-      <div class="card">
-        <div class="card-header">Server Info</div>
         <div class="card-body">
           <div class="stats-row">
             <div class="stat-pill">
@@ -196,8 +59,9 @@
               Total Sessions
             </div>
           </div>
-          <div style="font-size:0.68rem;color:#94a3b8;line-height:1.6;">
-            AudioSocket data is saved to:<br>
+          <div style="font-size:0.68rem;color:#94a3b8;line-height:1.6;margin-top:12px;">
+            AudioSocket Port: <strong id="serverPortLabel" style="color:var(--primary);">–</strong><br>
+            Data directory:<br>
             <code style="color:#3b82f6;">audiosocket/{uuid}/</code>
           </div>
         </div>
@@ -261,7 +125,7 @@
     <div class="footer-content">
       <div class="footer-brand">
         <span class="footer-icon">🎙</span>
-        <span>Stereo Transcribe Pro</span>
+        <span>WASA</span>
       </div>
       <div class="footer-links">
         <a href="https://mhrgl.com" target="_blank">© 2026 MHRGL.COM</a>

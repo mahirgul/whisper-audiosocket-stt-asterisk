@@ -1,16 +1,14 @@
 {
   "port": 9092,
-  "target_lang": "en",
   "transcription_mode": "on_close",
   "input_sample_rate": 8000,
   "input_channels": 1,
   "input_sample_width": 2,
-  "send_silence_frames": false,
-  "vad_rms_threshold": 300,
-  "vad_silence_threshold_ms": 1500,
+  "vad_silence_threshold_ms": 5000,
+  "vad_rms_threshold": 100,
   "vad_min_chunk_ms": 1000,
-  "force_endian_swap": false,
   "debug_mode": false,
+  "send_silence_frames": true,
   "delivery": {
     "enabled": false,
     "url": "http://your-server/api/receive-audio",
@@ -18,8 +16,7 @@
     "field_name": "audio",
     "timeout_s": 10,
     "extra_fields": {
-      "session_id": "{uuid}",
-      "lang": "{target_lang}"
+      "session_id": "{uuid}"
     }
   }
-}
+  }

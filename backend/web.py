@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
@@ -12,7 +12,6 @@ import tempfile
 import json
 import shutil
 import asyncio
-import sys
 import argparse
 import queue
 import processor
@@ -25,7 +24,9 @@ import audiosocket_server as as_srv
 
 # Parse command line arguments (safe at import time — no side effects)
 parser = argparse.ArgumentParser()
-parser.add_argument("--model", type=str, default="medium", help="Whisper model to use")
+parser.add_argument(
+    "--model", type=str, default="medium", help="Whisper model to use"
+)
 args, unknown = parser.parse_known_args()
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -51,14 +52,24 @@ async def lifespan(app: FastAPI):
     as_srv.shutdown_worker()
     model_manager.stop()
 
+
 app = FastAPI(lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 job_stats = {
-    "status": "loading", "cpu_usage": 0, "ram_usage_gb": 0, 
-    "ram_total_gb": round(psutil.virtual_memory().total / (1024**3), 1), 
-    "current_task": "Waking up AI..."
+    "status": "loading",
+    "cpu_usage": 0,
+    "ram_usage_gb": 0,
+    "ram_total_gb": round(psutil.virtual_memory().total / (1024**3), 1),
+    "current_task": "Waking up AI...",
 }
+
 
 def update_stats():
     # Initial call to avoid 0.0 on first read
@@ -69,10 +80,14 @@ def update_stats():
         job_stats["status"] = processor.model_status
         job_stats["current_task"] = processor.current_task
         job_stats["cpu_usage"] = psutil.cpu_percent(interval=None)
-        job_stats["ram_usage_gb"] = round(psutil.virtual_memory().used / (1024**3), 2)
+        job_stats["ram_usage_gb"] = round(
+            psutil.virtual_memory().used / (1024**3), 2
+        )
         time.sleep(1)
 
+
 threading.Thread(target=update_stats, daemon=True).start()
+
 
 def get_safe_path(base_dir, user_input, is_file=True):
     """
@@ -88,12 +103,23 @@ def get_safe_path(base_dir, user_input, is_file=True):
         raise HTTPException(status_code=400, detail="Invalid path or ID")
     return target_path
 
+
 # ---------------------------------------------------------------------------
 # Existing routes — unchanged
 # ---------------------------------------------------------------------------
 
+
 @app.get("/stats")
-async def get_stats(): return job_stats
+async def get_stats():
+    return job_stats
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    # This prevents attempts to connect to /ws from hitting the static mount
+    await websocket.accept()
+    await websocket.close()
+
 
 @app.post("/transcribe")
 async def transcribe(file: UploadFile = File(...)):
@@ -101,35 +127,44 @@ async def transcribe(file: UploadFile = File(...)):
     fd, tmp_path = tempfile.mkstemp(suffix=".wav")
     os.close(fd)
     try:
-        with open(tmp_path, "wb") as f: f.write(await file.read())
-        
+        with open(tmp_path, "wb") as f:
+            f.write(await file.read())
+
         # Save original file to outputs for playback
         out_wav = os.path.join(OUTPUT_DIR, f"{job_id}.wav")
         shutil.copy2(tmp_path, out_wav)
         audio_url = f"/outputs/{job_id}.wav"
 
-        results = await processor.transcribe_audio(tmp_path, output_dir=OUTPUT_DIR)
-        
+        results = await processor.transcribe_audio(
+            tmp_path, output_dir=OUTPUT_DIR
+        )
+
         # Save metadata for history
         meta = {
             "job_id": job_id,
             "audio_url": audio_url,
-            "orig_l": results["orig_l_srt"], "orig_r": results["orig_r_srt"],
-            "time": time.time()
+            "orig_l": results["orig_l_srt"],
+            "orig_r": results["orig_r_srt"],
+            "time": time.time(),
         }
-        with open(os.path.join(OUTPUT_DIR, f"{job_id}.json"), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(OUTPUT_DIR, f"{job_id}.json"), "w", encoding="utf-8"
+        ) as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
 
         return {
             "job_id": job_id,
             "audio_url": audio_url,
-            "orig_l": results["orig_l_srt"], "orig_r": results["orig_r_srt"]
+            "orig_l": results["orig_l_srt"],
+            "orig_r": results["orig_r_srt"],
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         processor.model_status = "idle"
-        if os.path.exists(tmp_path): os.unlink(tmp_path)
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
 
 @app.get("/history")
 async def get_history(page: int = 1, limit: int = 20):
@@ -137,16 +172,20 @@ async def get_history(page: int = 1, limit: int = 20):
     for fn in os.listdir(OUTPUT_DIR):
         if fn.endswith(".json"):
             try:
-                with open(os.path.join(OUTPUT_DIR, fn), "r", encoding="utf-8") as f:
+                meta_p = os.path.join(OUTPUT_DIR, fn)
+                with open(meta_p, "r", encoding="utf-8") as f:
                     meta = json.load(f)
-                    items.append({
-                        "name": fn.replace(".json", ""),
-                        "time": meta.get("time", os.path.getmtime(os.path.join(OUTPUT_DIR, fn))),
-                        "url": meta.get("audio_url"),
-                        "meta": meta
-                    })
-            except: pass
-    
+                    items.append(
+                        {
+                            "name": fn.replace(".json", ""),
+                            "time": meta.get("time", os.path.getmtime(meta_p)),
+                            "url": meta.get("audio_url"),
+                            "meta": meta,
+                        }
+                    )
+            except Exception:
+                pass
+
     items.sort(key=lambda x: x["time"], reverse=True)
     start = (page - 1) * limit
     end = start + limit
@@ -154,18 +193,21 @@ async def get_history(page: int = 1, limit: int = 20):
         "items": items[start:end],
         "total": len(items),
         "page": page,
-        "pages": max(1, (len(items) + limit - 1) // limit)
+        "pages": max(1, (len(items) + limit - 1) // limit),
     }
+
 
 @app.delete("/delete/{job_id}")
 async def delete_job(job_id: str):
     for ext in [".json", ".wav"]:
         try:
             p = get_safe_path(OUTPUT_DIR, job_id + ext)
-            if os.path.exists(p): os.unlink(p)
+            if os.path.exists(p):
+                os.unlink(p)
         except HTTPException:
             continue
     return {"status": "deleted"}
+
 
 @app.delete("/delete-multiple")
 async def delete_multiple(job_ids: list[str]):
@@ -173,23 +215,29 @@ async def delete_multiple(job_ids: list[str]):
         for ext in [".json", ".wav"]:
             try:
                 p = get_safe_path(OUTPUT_DIR, job_id + ext)
-                if os.path.exists(p): os.unlink(p)
+                if os.path.exists(p):
+                    os.unlink(p)
             except HTTPException:
                 continue
     return {"status": "deleted"}
+
 
 @app.get("/download/{job_id}")
 async def download_bundle(job_id: str):
     # Just a simple redirect or direct file serve for now
     # In a full version, we could zip SRTs + WAV here
     p = get_safe_path(OUTPUT_DIR, job_id + ".wav")
-    if not os.path.exists(p): raise HTTPException(status_code=404)
+    if not os.path.exists(p):
+        raise HTTPException(status_code=404)
     from fastapi.responses import FileResponse
+
     return FileResponse(p, filename=f"{job_id}.wav")
+
 
 # ---------------------------------------------------------------------------
 # AudioSocket routes
 # ---------------------------------------------------------------------------
+
 
 @app.get("/audiosocket/status")
 async def as_status():
@@ -230,14 +278,16 @@ async def as_sessions(page: int = 1, limit: int = 20):
                             meta = json.load(f)
                     except Exception:
                         pass
-                sessions.append({
-                    "uuid": entry.name,
-                    "status": meta.get("status", "unknown"),
-                    "started": meta.get("started"),
-                    "completed": meta.get("completed"),
-                    "total_chunks": meta.get("total_chunks", 0),
-                    "duration_s": meta.get("duration_s"),
-                })
+                sessions.append(
+                    {
+                        "uuid": entry.name,
+                        "status": meta.get("status", "unknown"),
+                        "started": meta.get("started"),
+                        "completed": meta.get("completed"),
+                        "total_chunks": meta.get("total_chunks", 0),
+                        "duration_s": meta.get("duration_s"),
+                    }
+                )
 
     sessions.sort(key=lambda x: x.get("started") or "", reverse=True)
     start_idx = (page - 1) * limit
@@ -246,7 +296,7 @@ async def as_sessions(page: int = 1, limit: int = 20):
         "items": sessions[start_idx:end_idx],
         "total": len(sessions),
         "page": page,
-        "pages": max(1, (len(sessions) + limit - 1) // limit)
+        "pages": max(1, (len(sessions) + limit - 1) // limit),
     }
 
 
@@ -266,11 +316,13 @@ async def as_session_detail(session_uuid: str):
     # Enumerate chunks
     chunks = []
     files = sorted(os.listdir(session_dir))
-    chunk_indices = sorted({
-        int(n.split("_")[1].split(".")[0])
-        for n in files
-        if n.startswith("chunk_") and "_" in n
-    })
+    chunk_indices = sorted(
+        {
+            int(n.split("_")[1].split(".")[0])
+            for n in files
+            if n.startswith("chunk_") and "_" in n
+        }
+    )
 
     for idx in chunk_indices:
         name = f"chunk_{idx:03d}"
@@ -282,7 +334,8 @@ async def as_session_detail(session_uuid: str):
                 # Read SRT content inline
                 if suffix.endswith(".srt"):
                     try:
-                        with open(os.path.join(session_dir, fn), "r", encoding="utf-8") as f:
+                        srt_p = os.path.join(session_dir, fn)
+                        with open(srt_p, "r", encoding="utf-8") as f:
                             chunk_info[key + "_content"] = f.read()
                     except Exception:
                         pass
@@ -307,9 +360,10 @@ async def as_sse_stream():
     Server-Sent Events endpoint for real-time AudioSocket monitoring.
     Polls the thread-safe queue from the AudioSocket thread.
     """
+
     async def event_generator():
         q = as_srv.subscribe()
-        yield "data: {\"event\": \"connected\"}\n\n"
+        yield 'data: {"event": "connected"}\n\n'
         last_ping = time.time()
         try:
             while True:
@@ -317,16 +371,18 @@ async def as_sse_stream():
                     event = q.get_nowait()
                     if event["event"] == "shutdown":
                         break
-                    payload = json.dumps({"event": event["event"], "data": event["data"]})
-                    yield f"data: {payload}\n\n"
+                    pld = json.dumps(
+                        {"event": event["event"], "data": event["data"]}
+                    )
+                    yield f"data: {pld}\n\n"
                 except queue.Empty:
-                    # No event — check if it's time to send a keep-alive ping (every 15s)
+                    # Keep-alive ping (every 15s)
                     now = time.time()
                     if now - last_ping > 15:
                         yield ": ping\n\n"
                         last_ping = now
-                    
-                    await asyncio.sleep(0.2)  # Balanced sleep to avoid busy-loop
+
+                    await asyncio.sleep(0.2)
         finally:
             as_srv.unsubscribe(q)
 
@@ -337,17 +393,27 @@ async def as_sse_stream():
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
-        }
+        },
     )
+
 
 # ---------------------------------------------------------------------------
 # Static file mounts (order matters — most specific first)
 # ---------------------------------------------------------------------------
 
 app.mount("/outputs", StaticFiles(directory=OUTPUT_DIR), name="outputs")
-app.mount("/audiosocket-files", StaticFiles(directory=AUDIOSOCKET_DIR), name="audiosocket_files")
-app.mount("/", StaticFiles(directory=os.path.join(BASE_DIR, "frontend"), html=True), name="frontend")
+app.mount(
+    "/audiosocket-files",
+    StaticFiles(directory=AUDIOSOCKET_DIR),
+    name="audiosocket_files",
+)
+app.mount(
+    "/",
+    StaticFiles(directory=os.path.join(BASE_DIR, "frontend"), html=True),
+    name="frontend",
+)
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

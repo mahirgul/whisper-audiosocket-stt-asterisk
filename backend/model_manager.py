@@ -51,6 +51,7 @@ _model_name: str = "medium"
 # Public API  (called from the MAIN process)
 # ---------------------------------------------------------------------------
 
+
 def start(model_name: str = "medium") -> None:
     """Start the model worker process (call once at app startup)."""
     global _process, _request_queue, _response_queue, _listener_thread
@@ -89,13 +90,13 @@ def stop() -> None:
     global _process, _request_queue, _response_queue, _listener_thread
     if _request_queue is not None:
         try:
-            _request_queue.put(None)        # poison pill for worker process
+            _request_queue.put(None)  # poison pill for worker process
         except Exception:
             pass
-    
+
     if _response_queue is not None:
         try:
-            _response_queue.put(None)       # poison pill for listener thread
+            _response_queue.put(None)  # poison pill for listener thread
         except Exception:
             pass
 
@@ -104,7 +105,7 @@ def stop() -> None:
         if _process.is_alive():
             _process.terminate()
         _process = None
-    
+
     if _listener_thread is not None:
         _listener_thread.join(timeout=2)
         _listener_thread = None
@@ -113,7 +114,9 @@ def stop() -> None:
     _response_queue = None
 
 
-def transcribe(audio_path: str, *, timeout: float = 300.0, options: dict | None = None) -> dict:
+def transcribe(
+    audio_path: str, *, timeout: float = 300.0, options: dict | None = None
+) -> dict:
     """
     Thread-safe transcription request.
 
@@ -134,11 +137,13 @@ def transcribe(audio_path: str, *, timeout: float = 300.0, options: dict | None 
 
     with _pending_lock:
         _pending[req_id] = entry
-        # Set status to processing immediately to avoid race conditions with web.py pollers
+        # Immediate status update for pollers
         model_status = "processing"
         current_task = "Transcribing..."
 
-    _request_queue.put({"id": req_id, "audio_path": audio_path, "options": options or {}})
+    _request_queue.put(
+        {"id": req_id, "audio_path": audio_path, "options": options or {}}
+    )
 
     if not event.wait(timeout=timeout):
         with _pending_lock:
@@ -155,10 +160,15 @@ def transcribe(audio_path: str, *, timeout: float = 300.0, options: dict | None 
     return msg
 
 
-async def transcribe_async(audio_path: str, *, timeout: float = 300.0, options: dict | None = None) -> dict:
-    """Async wrapper — runs transcribe() in a thread so it doesn't block the event loop."""
+async def transcribe_async(
+    audio_path: str, *, timeout: float = 300.0, options: dict | None = None
+) -> dict:
+    """Async wrapper for transcribe()."""
     import asyncio
-    return await asyncio.to_thread(transcribe, audio_path, timeout=timeout, options=options)
+
+    return await asyncio.to_thread(
+        transcribe, audio_path, timeout=timeout, options=options
+    )
 
 
 def is_ready() -> bool:
@@ -168,6 +178,7 @@ def is_ready() -> bool:
 # ---------------------------------------------------------------------------
 # Response listener  (runs in a background thread in the MAIN process)
 # ---------------------------------------------------------------------------
+
 
 def _response_listener() -> None:
     global model_status, current_task
@@ -202,10 +213,13 @@ def _response_listener() -> None:
 # Worker process  (SEPARATE PROCESS — holds the Whisper model)
 # ---------------------------------------------------------------------------
 
-def _worker_main(req_q: multiprocessing.Queue,
-                 resp_q: multiprocessing.Queue,
-                 model_name: str,
-                 model_dir: str) -> None:
+
+def _worker_main(
+    req_q: multiprocessing.Queue,
+    resp_q: multiprocessing.Queue,
+    model_name: str,
+    model_dir: str,
+) -> None:
     """Entry point for the model worker process."""
     # Fix encoding on Windows
     if sys.stdout and hasattr(sys.stdout, "reconfigure"):
@@ -223,29 +237,48 @@ def _worker_main(req_q: multiprocessing.Queue,
         # Check if model file exists on disk
         model_path = os.path.join(model_dir, f"{model_name}.pt")
         if os.path.exists(model_path):
-            resp_q.put({"type": "status", "status": "loading",
-                        "task": f"Loading {model_name} model from disk ({device})..."})
+            resp_q.put(
+                {
+                    "type": "status",
+                    "status": "loading",
+                    "task": (
+                        f"Loading {model_name} model from disk "
+                        f"({device})..."
+                    ),
+                }
+            )
         else:
-            resp_q.put({"type": "status", "status": "loading",
-                        "task": f"Downloading {model_name} model (this may take a while)..."})
+            resp_q.put(
+                {
+                    "type": "status",
+                    "status": "loading",
+                    "task": (
+                        f"Downloading {model_name} model "
+                        "(this may take a while)..."
+                    ),
+                }
+            )
 
         print(f"[ModelWorker] Loading Whisper '{model_name}' on {device} ...")
-        model = whisper.load_model(model_name, device=device, download_root=model_dir)
-        print(f"[ModelWorker] Model loaded. Ready for requests.")
+        model = whisper.load_model(
+            model_name, device=device, download_root=model_dir
+        )
+        print("[ModelWorker] Model loaded. Ready for requests.")
 
         resp_q.put({"type": "status", "status": "idle", "task": "Ready"})
 
     except Exception as e:
         traceback.print_exc()
-        resp_q.put({"type": "status", "status": "error",
-                    "task": f"Error loading model: {e}"})
+        resp_q.put(
+            {"type": "status", "status": "error", "task": f"Error: {e}"}
+        )
         return
 
     # Main request loop
     while True:
         try:
             request = req_q.get()
-            if request is None:                     # shutdown signal
+            if request is None:  # shutdown signal
                 print("[ModelWorker] Shutting down.")
                 break
 
@@ -253,29 +286,34 @@ def _worker_main(req_q: multiprocessing.Queue,
             audio_path = request["audio_path"]
             options = request.get("options", {})
 
-            resp_q.put({"type": "status", "status": "processing",
-                        "task": "Transcribing..."})
+            resp_q.put(
+                {"type": "status", "status": "processing", "task": "AI..."}
+            )
 
             try:
                 # Determine FP16 based on device to suppress CPU warnings
                 if "fp16" not in options:
-                    options["fp16"] = (device == "cuda")
+                    options["fp16"] = device == "cuda"
 
                 result = model.transcribe(audio_path, **options)
-                resp_q.put({
-                    "type": "result",
-                    "id": req_id,
-                    "segments": result.get("segments", []),
-                    "text": result.get("text", ""),
-                    "language": result.get("language", ""),
-                })
+                resp_q.put(
+                    {
+                        "type": "result",
+                        "id": req_id,
+                        "segments": result.get("segments", []),
+                        "text": result.get("text", ""),
+                        "language": result.get("language", ""),
+                    }
+                )
             except Exception as e:
                 traceback.print_exc()
-                resp_q.put({
-                    "type": "error",
-                    "id": req_id,
-                    "error": str(e),
-                })
+                resp_q.put(
+                    {
+                        "type": "error",
+                        "id": req_id,
+                        "error": str(e),
+                    }
+                )
 
             resp_q.put({"type": "status", "status": "idle", "task": "Ready"})
 

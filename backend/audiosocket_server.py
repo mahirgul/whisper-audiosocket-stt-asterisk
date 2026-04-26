@@ -149,9 +149,9 @@ def load_config(config_path: str) -> dict:
             "enabled": False,
             "url": "http://your-server/api/receive-audio",
             "method": "POST",
-            "field_name": "audio",
+            "field_name": "session_zip",
             "extra_fields": {"session_id": "{uuid}"},
-            "timeout_s": 10,
+            "timeout_s": 30,
         },
     }
     if os.path.exists(config_path):
@@ -854,25 +854,25 @@ def _process_session_blocking(
             f.write(_to_srt(segments))
 
         # 4. REST Delivery
-        wav_bytes = audiosocket_processor.pcm_bytes_to_wav_bytes(
-            pcm_data, sample_rate, channels, sample_width
-        )
-        status_code = audiosocket_processor.deliver_chunk_sync(
-            wav_bytes, cfg, session_id, 1
-        )
-        if status_code > 0:
-            print(
-                f"[AudioSocket] Session {session_id[:8]} delivered "
-                f"(HTTP {status_code})"
+        delivery_cfg = cfg.get("delivery", {})
+        if delivery_cfg.get("enabled"):
+            # Send ONLY ZIP
+            status_code = audiosocket_processor.deliver_session_zip_sync(
+                out_dir, cfg, session_id
             )
-            _emit_sync(
-                "delivered",
-                {
-                    "uuid": session_id,
-                    "chunk_idx": 1,
-                    "status_code": status_code,
-                },
-            )
+            if status_code > 0:
+                print(
+                    f"[AudioSocket] Session {session_id[:8]} ZIP delivered "
+                    f"(HTTP {status_code})"
+                )
+                _emit_sync(
+                    "delivered",
+                    {
+                        "uuid": session_id,
+                        "chunk_idx": 1,
+                        "status_code": status_code,
+                    },
+                )
 
         # 5. Write result metadata
         result_path = os.path.join(out_dir, "result.json")

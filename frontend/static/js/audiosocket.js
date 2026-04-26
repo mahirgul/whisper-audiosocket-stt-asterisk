@@ -353,13 +353,18 @@ async function loadSessionDetail(uuid, container) {
         </div>`;
     }).join("");
 
+    const zipBtn = `
+      <a href="/audiosocket/sessions/${uuid}/download-zip" class="btn btn-primary btn-full" style="margin-top:12px; text-decoration:none; display:block; text-align:center; line-height:30px;">
+        DOWNLOAD SESSION ZIP
+      </a>`;
+
     const deleteBtn = `
-      <button class="btn btn-danger btn-full" style="margin-top:12px;"
+      <button class="btn btn-danger btn-full" style="margin-top:8px;"
         onclick="deleteSession('${uuid}')">
         DELETE SESSION
       </button>`;
 
-    container.innerHTML = `<div class="chunk-list">${chunksHtml}</div>${deleteBtn}`;
+    container.innerHTML = `<div class="chunk-list">${chunksHtml}</div>${zipBtn}${deleteBtn}`;
 
   } catch (e) {
     container.innerHTML = `<div style="color:#f87171;font-size:0.7rem;">Error: ${e.message}</div>`;

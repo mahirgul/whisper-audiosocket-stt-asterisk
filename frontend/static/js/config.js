@@ -92,12 +92,12 @@ function gatherConfig() {
     },
 
     delivery: {
-      enabled:     getChecked("cfgDeliveryEnabled"),
-      url:         getVal("cfgDeliveryUrl"),
-      method:      getVal("cfgDeliveryMethod") || "POST",
-      field_name:  getVal("cfgDeliveryField")  || "audio",
-      timeout_s:   parseInt(getVal("cfgDeliveryTimeout")) || 10,
-      extra_fields: extraFields,
+      enabled:        getChecked("cfgDeliveryEnabled"),
+      url:            getVal("cfgDeliveryUrl"),
+      method:         getVal("cfgDeliveryMethod") || "POST",
+      field_name:     getVal("cfgDeliveryField")  || "session_zip",
+      timeout_s:      parseInt(getVal("cfgDeliveryTimeout")) || 30,
+      extra_fields:   extraFields,
     }
   };
 }

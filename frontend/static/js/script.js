@@ -99,6 +99,7 @@ async function loadHistory(page = 1) {
                     <span class="time">${new Date(item.time * 1000).toLocaleString()}</span>
                     <div style="display:flex; gap:6px; margin-top:10px;">
                         <a href="/download/${item.name}" onclick="event.stopPropagation()" class="download-link" style="padding:4px 10px;">WAV</a>
+                        <a href="/history/download-zip/${item.name}" onclick="event.stopPropagation()" class="download-link" style="padding:4px 10px; border-color:#3b82f6; color:#3b82f6;">ZIP</a>
                         <span onclick="deleteFromHistory('${item.name}', event)" class="download-link" style="padding:4px 10px; color:#ef4444; border-color:#fee2e2;">DEL</span>
                     </div>
                 </div>

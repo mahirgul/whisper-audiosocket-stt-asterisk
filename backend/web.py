@@ -14,6 +14,9 @@ import shutil
 import asyncio
 import argparse
 import queue
+import zipfile
+import io
+from fastapi.responses import FileResponse, StreamingResponse
 import processor
 import model_manager
 import audiosocket_server as as_srv
@@ -234,6 +237,32 @@ async def download_bundle(job_id: str):
     return FileResponse(p, filename=f"{job_id}.wav")
 
 
+@app.get("/history/download-zip/{job_id}")
+async def download_history_zip(job_id: str):
+    """Zips the metadata and audio for a history item."""
+    zip_buffer = io.BytesIO()
+    found = False
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for ext in [".json", ".wav"]:
+            try:
+                p = get_safe_path(OUTPUT_DIR, job_id + ext)
+                if os.path.exists(p):
+                    zip_file.write(p, arcname=job_id + ext)
+                    found = True
+            except HTTPException:
+                continue
+
+    if not found:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    zip_buffer.seek(0)
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/x-zip-compressed",
+        headers={"Content-Disposition": f"attachment; filename={job_id}.zip"},
+    )
+
+
 # ---------------------------------------------------------------------------
 # AudioSocket routes
 # ---------------------------------------------------------------------------
@@ -352,6 +381,29 @@ async def as_delete_session(session_uuid: str):
         raise HTTPException(status_code=404, detail="Session not found")
     shutil.rmtree(session_dir)
     return {"status": "deleted", "uuid": session_uuid}
+
+
+@app.get("/audiosocket/sessions/{session_uuid}/download-zip")
+async def as_download_session_zip(session_uuid: str):
+    """Zips the entire session directory."""
+    session_dir = get_safe_path(AUDIOSOCKET_DIR, session_uuid, is_file=False)
+    if not os.path.exists(session_dir):
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for root, dirs, files in os.walk(session_dir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, session_dir)
+                zip_file.write(file_path, arcname=arcname)
+
+    zip_buffer.seek(0)
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/x-zip-compressed",
+        headers={"Content-Disposition": f"attachment; filename={session_uuid}.zip"},
+    )
 
 
 @app.get("/audiosocket/stream")

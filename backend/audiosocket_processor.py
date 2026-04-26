@@ -10,6 +10,8 @@ import wave
 import asyncio
 import aiohttp
 import time as _time
+import zipfile
+import os
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -71,23 +73,30 @@ def build_extra_fields(extra_fields: dict, uuid_str: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-async def deliver_chunk(
-    wav_bytes: bytes, config: dict, session_id: str, chunk_idx: int
+async def deliver_session_zip(
+    session_dir: str, config: dict, session_id: str
 ) -> int:
-    """Deliver one chunk to a REST endpoint if enabled."""
+    """Deliver a ZIP of the entire session directory to a REST endpoint."""
     d = config.get("delivery", {})
     if not d.get("enabled") or not d.get("url"):
         return 0
 
     url = d.get("url")
     method = d.get("method", "POST").upper()
-    field_name = d.get("field_name", "audio")
-    timeout_s = d.get("timeout_s", 10)
+    field_name = d.get("field_name", "session_zip")
+    timeout_s = d.get("timeout_s", 30)  # Zips might take longer
     extra = build_extra_fields(d.get("extra_fields", {}), session_id)
 
-    # Add metadata
-    extra["chunk_index"] = str(chunk_idx)
+    # Create ZIP in memory
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+        for root, dirs, files in os.walk(session_dir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, session_dir)
+                zip_file.write(file_path, arcname=arcname)
 
+    zip_bytes = zip_buffer.getvalue()
     timeout = aiohttp.ClientTimeout(total=timeout_s)
 
     try:
@@ -98,30 +107,29 @@ async def deliver_chunk(
 
             data.add_field(
                 field_name,
-                wav_bytes,
-                filename=f"chunk_{chunk_idx:03d}.wav",
-                content_type="audio/wav",
+                zip_bytes,
+                filename=f"{session_id}.zip",
+                content_type="application/zip",
             )
 
             async with session.request(method, url, data=data) as resp:
                 return resp.status
     except Exception as e:
-        print(f"[Delivery] Error sending chunk {chunk_idx}: {e}")
+        print(f"[Delivery] Error sending session zip {session_id}: {e}")
         return 500
 
 
-def deliver_chunk_sync(
-    wav_bytes: bytes, config: dict, session_id: str, chunk_idx: int
+def deliver_session_zip_sync(
+    session_dir: str, config: dict, session_id: str
 ) -> int:
-    """Synchronous wrapper for deliver_chunk (used in on_close mode)."""
+    """Synchronous wrapper for deliver_session_zip."""
     try:
-        # Create a new loop for the synchronous call in the background thread
         loop = asyncio.new_event_loop()
         return loop.run_until_complete(
-            deliver_chunk(wav_bytes, config, session_id, chunk_idx)
+            deliver_session_zip(session_dir, config, session_id)
         )
     except Exception as e:
-        print(f"[Delivery] Sync error: {e}")
+        print(f"[Delivery] Sync zip error: {e}")
         return 500
     finally:
         try:

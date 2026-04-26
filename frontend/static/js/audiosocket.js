@@ -261,6 +261,13 @@ function renderHistory(data) {
   const totalEl = document.getElementById("totalSessions");
   if (totalEl) totalEl.textContent = data.total;
 
+  // Reset bulk actions UI
+  const bulk = document.getElementById("bulkActions");
+  if (bulk) bulk.style.display = "none";
+  const selectAll = document.getElementById("selectAll");
+  if (selectAll) selectAll.checked = false;
+  updateSelectedCount();
+
   if (!data.items || data.items.length === 0) {
     list.innerHTML = `
       <div class="monitor-empty">
@@ -273,15 +280,33 @@ function renderHistory(data) {
 
   list.innerHTML = data.items.map(s => {
     const short = s.uuid.substring(0, 18) + "…";
-    const statusTag = `<span class="tag ${s.status}">${s.status}</span>`;
+    const statusTag = `<span class="tag ${s.status || 'unknown'}">${s.status || 'unknown'}</span>`;
     const chunks = `<span class="tag">${s.total_chunks ?? 0} chunks</span>`;
-    const lang   = `<span class="tag">${s.target_lang}</span>`;
-    const dur    = s.duration_s != null ? `<span class="tag">${s.duration_s}s</span>` : "";
+    const lang   = `<span class="tag">${s.target_lang || 'original'}</span>`;
+    const dur    = `<span class="tag">${Math.round(s.duration_s || 0)}s</span>`;
+
+    let timeStr = "";
+    if (s.started) {
+      const d = new Date(s.started);
+      if (!isNaN(d.getTime())) {
+        timeStr = d.toLocaleString();
+      } else {
+        // If it's a number (float seconds)
+        const d2 = new Date(parseFloat(s.started) * 1000);
+        if (!isNaN(d2.getTime())) timeStr = d2.toLocaleString();
+      }
+    }
 
     return `
       <div class="session-item" id="sess_${s.uuid}" onclick="toggleSession('${s.uuid}')">
         <div class="session-header">
-          <span class="session-uuid" title="${s.uuid}">${short}</span>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <input type="checkbox" class="item-checkbox" value="${s.uuid}" onclick="toggleSelect(event)">
+            <div style="display:flex; flex-direction:column; gap:2px;">
+              <span class="session-uuid" title="${s.uuid}">${short}</span>
+              <span class="session-time">${timeStr}</span>
+            </div>
+          </div>
           <div class="session-meta">${lang}${chunks}${dur}${statusTag}</div>
         </div>
         <div class="session-detail" id="detail_${s.uuid}">
@@ -354,17 +379,17 @@ async function loadSessionDetail(uuid, container) {
     }).join("");
 
     const zipBtn = `
-      <a href="/audiosocket/sessions/${uuid}/download-zip" class="btn btn-primary btn-full" style="margin-top:12px; text-decoration:none; display:block; text-align:center; line-height:30px;">
-        DOWNLOAD SESSION ZIP
+      <a href="/audiosocket/sessions/${uuid}/download-zip" class="chunk-link" style="margin-top:12px; display:inline-block; border-color:#3b82f6; color:#3b82f6;">
+        ZIP (Full Session)
       </a>`;
 
     const deleteBtn = `
-      <button class="btn btn-danger btn-full" style="margin-top:8px;"
+      <span class="chunk-link" style="margin-top:12px; margin-left:6px; display:inline-block; color:#ef4444; border-color:#fee2e2;"
         onclick="deleteSession('${uuid}')">
-        DELETE SESSION
-      </button>`;
+        DELETE
+      </span>`;
 
-    container.innerHTML = `<div class="chunk-list">${chunksHtml}</div>${zipBtn}${deleteBtn}`;
+    container.innerHTML = `<div class="chunk-list">${chunksHtml}</div><div style="margin-top:4px;">${zipBtn}${deleteBtn}</div>`;
 
   } catch (e) {
     container.innerHTML = `<div style="color:#f87171;font-size:0.7rem;">Error: ${e.message}</div>`;
@@ -387,12 +412,64 @@ function playInline(url, id) {
 
 async function deleteSession(uuid) {
   if (!confirm(`Delete session ${uuid.substring(0, 8)}…?`)) return;
-  const r = await fetch(`/audiosocket/sessions/${uuid}`, { method: "DELETE" });
-  if (r.ok) {
-    showToast("Session deleted", "success");
-    loadHistory(historyPage);
-  } else {
-    showToast("Delete failed", "error");
+  try {
+    const r = await fetch(`/audiosocket/sessions/${uuid}`, { method: "DELETE" });
+    if (r.ok) {
+      showToast("Session deleted", "success");
+      loadHistory(historyPage);
+    } else {
+      const err = await r.json();
+      showToast("Delete failed: " + (err.detail || "Unknown error"), "error");
+    }
+  } catch (e) {
+    showToast("Error: " + e.message, "error");
+  }
+}
+
+function toggleSelect(event) {
+  event.stopPropagation();
+  updateSelectedCount();
+}
+
+function toggleSelectAll() {
+  const master = document.getElementById("selectAll");
+  const checks = document.querySelectorAll(".item-checkbox");
+  checks.forEach(c => c.checked = master.checked);
+  updateSelectedCount();
+}
+
+function updateSelectedCount() {
+  const checks = document.querySelectorAll(".item-checkbox:checked");
+  const count = checks.length;
+  const bulk = document.getElementById("bulkActions");
+  const countEl = document.getElementById("selectedCount");
+
+  if (bulk) bulk.style.display = count > 0 ? "flex" : "none";
+  if (countEl) countEl.textContent = `${count} selected`;
+}
+
+async function deleteSelectedSessions() {
+  const checks = document.querySelectorAll(".item-checkbox:checked");
+  const uuids = Array.from(checks).map(c => c.value);
+  if (uuids.length === 0) return;
+
+  if (!confirm(`Delete ${uuids.length} selected sessions?`)) return;
+
+  try {
+    const r = await fetch("/audiosocket/bulk-delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(uuids)
+    });
+    if (r.ok) {
+      showToast(`${uuids.length} sessions deleted`, "success");
+      loadHistory(historyPage);
+    } else {
+      const err = await r.json();
+      showToast("Delete failed: " + (err.detail || "Unknown error"), "error");
+    }
+  } catch (e) {
+    showToast("Error: " + e.message, "error");
   }
 }
 

@@ -1,17 +1,24 @@
 let ws, audioCtx, audioEl, sourceNode, splitter, merger, leftGain, rightGain;
 let currentPage = 1, historyItems = [];
 
-// Stats Interval
-setInterval(async () => {
+async function checkStatus() {
     try {
         const r = await fetch('/stats');
         const d = await r.json();
         document.getElementById('sCpu').innerText = d.cpu_usage + "%";
         document.getElementById('sRam').innerText = d.ram_usage_gb + " / " + d.ram_total_gb + " GB";
-        document.getElementById('sTask').innerText = d.current_task || "Idle";
+        
+        let taskText = d.current_task || "Idle";
+        if (d.status !== "loading" && taskText === "Starting...") {
+            taskText = "Idle";
+        }
+        document.getElementById('sTask').innerText = taskText;
         document.getElementById('modelOverlay').style.display = (d.status === "loading") ? 'flex' : 'none';
     } catch(e){}
-}, 1000);
+}
+
+// Stats Interval
+setInterval(checkStatus, 1000);
 
 function setupAudioEngine() {
     if (audioCtx) return;
@@ -91,12 +98,16 @@ async function loadHistory(page = 1) {
             return;
         }
 
-        container.innerHTML = historyItems.map((item, idx) => `
+        container.innerHTML = historyItems.map((item, idx) => {
+            const dateObj = item.time ? new Date(item.time * 1000) : new Date();
+            const timeStr = dateObj.toLocaleString();
+            
+            return `
             <div class="history-item" onclick="loadFromHistory(${idx}, this)">
                 <input type="checkbox" class="item-checkbox" value="${item.name}" onclick="toggleSelect(event)">
                 <div class="item-info">
                     <strong style="word-break:break-all; display:block; margin-bottom:2px;">${item.name}</strong>
-                    <span class="time">${new Date(item.time * 1000).toLocaleString()}</span>
+                    <span class="time">${timeStr}</span>
                     <div style="display:flex; gap:6px; margin-top:10px;">
                         <a href="/download/${item.name}" onclick="event.stopPropagation()" class="download-link" style="padding:4px 10px;">WAV</a>
                         <a href="/history/download-zip/${item.name}" onclick="event.stopPropagation()" class="download-link" style="padding:4px 10px; border-color:#3b82f6; color:#3b82f6;">ZIP</a>
@@ -104,7 +115,7 @@ async function loadHistory(page = 1) {
                     </div>
                 </div>
             </div>
-        `).join('');
+        `}).join('');
 
         const pag = document.getElementById('pagination');
         pag.innerHTML = '';
@@ -233,5 +244,6 @@ async function handleProcessing(endpoint, payload) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    checkStatus(); // Immediate check
     loadHistory(1);
 });

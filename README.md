@@ -13,14 +13,12 @@ WASA (V2) features a high-performance **Multi-Process Architecture**, offloading
 
 ## 🚀 Key Features
 
-- **Multi-Process AI Pipeline:** Dedicated model worker process manages a single Whisper instance (Tiny, Base, Small, Medium, Large, or Turbo) for all transcription tasks, preventing memory bloat and GIL contention.
-- **GPU Acceleration:** Automatic CUDA detection for 5-10x faster transcription on compatible hardware.
-- **Ignore Silence Timeout:** (New) Option to keep connections alive even during long periods of silence, preventing premature hangups from the Asterisk side.
-- **Send Silence Frames:** Built-in keepalive mechanism that sends silent frames back to Asterisk to maintain active sessions.
-- **Smart VAD (Voice Activity Detection):** RMS-based silence detection with configurable thresholds and minimum chunk durations.
-- **Independent Stereo Processing:** Automatically splits Left and Right channels to process them independently, perfect for call recordings with agent/customer on separate tracks.
-- **Real-time Monitoring:** Live SSE (Server-Sent Events) stream for tracking active connections, VAD stats, and transcription progress.
-- **Secure Architecture:** Robust path traversal protection and isolated session management.
+- **Multi-Process AI Pipeline:** Dedicated model worker process manages a single Whisper instance for responsive performance.
+- **Immediate File Persistence:** (New) Audio files are now saved to disk immediately upon hangup, even while other calls are being transcribed, ensuring zero data loss and faster UI updates.
+- **Session ZIP Export:** (New) Download complete session packages (WAV + SRT + JSON) directly from the dashboard.
+- **REST ZIP Delivery:** (New) Automatically push full session ZIPs to any remote REST endpoint (Webhook) upon completion.
+- **Bulk History Management:** (New) Select and delete multiple recordings or sessions at once for easier maintenance.
+- **GPU Acceleration:** Automatic CUDA detection for 5-10x faster transcription.
 
 ---
 

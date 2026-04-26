@@ -5,6 +5,7 @@ import json
 from pydub import AudioSegment
 
 import model_manager
+import utils
 
 # ---------------------------------------------------------------------------
 # Module-level status variables (read/written by web.py)
@@ -32,45 +33,6 @@ def load_ai_config():
         except Exception:
             pass
     return {}
-
-
-def to_srt(segments, tag=""):
-    def ts(x):
-        return (
-            f"{time.strftime('%H:%M:%S', time.gmtime(x))},"
-            f"{int((x % 1) * 1000):03d}"
-        )
-
-    srt = []
-    for i, s in enumerate(segments):
-        txt = s["text"].strip()
-        t_start = ts(s["start"])
-        t_end = ts(s["end"])
-        line = f"{i+1}\n{t_start} --> {t_end}\n{txt}\n"
-        srt.append(line)
-    return "\n".join(srt)
-
-
-def process_segments_with_music(
-    segments, min_gap=3.0, no_speech_threshold=0.6
-):
-    processed = []
-    if not segments:
-        return processed
-    for i, s in enumerate(segments):
-        prob = s.get("no_speech_prob", 0)
-        is_music = prob > no_speech_threshold or not s["text"].strip()
-        if is_music:
-            s["text"] = "[MUSIC]"
-        if i > 0:
-            prev_end = processed[-1]["end"]
-            curr_start = s["start"]
-            if curr_start - prev_end > min_gap:
-                processed.append(
-                    {"start": prev_end, "end": curr_start, "text": "[MUSIC]"}
-                )
-        processed.append(s)
-    return processed
 
 
 async def transcribe_audio(file_path, output_dir="outputs"):
@@ -103,17 +65,17 @@ async def transcribe_audio(file_path, output_dir="outputs"):
     res_r = await model_manager.transcribe_async(r_path, options=whisper_opts)
     os.unlink(r_path)
 
-    segs_l = process_segments_with_music(
+    segs_l = utils.process_segments_with_music(
         res_l.get("segments", []), min_gap, no_speech_threshold
     )
-    segs_r = process_segments_with_music(
+    segs_r = utils.process_segments_with_music(
         res_r.get("segments", []), min_gap, no_speech_threshold
     )
 
     return {
         "unique_id": unique_id,
         "is_mono": original_channels == 1,
-        "orig_l_srt": to_srt(segs_l),
-        "orig_r_srt": to_srt(segs_r),
+        "orig_l_srt": utils.to_srt(segs_l),
+        "orig_r_srt": utils.to_srt(segs_r),
         "duration": total_ms,
     }

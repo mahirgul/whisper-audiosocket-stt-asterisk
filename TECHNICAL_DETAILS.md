@@ -17,8 +17,8 @@ WASA (Whisper AudioSocket Asterisk) operates on a **Decoupled Multi-Process Arch
 1.  **Reception:** Audio arrives as raw PCM (Signed Linear) via TCP.
 2.  **Isolation:** Each call is handled in its own isolated `asyncio` task. Variables and buffers are local to each task, preventing any audio leakage between concurrent calls.
 3.  **Buffering:** Audio is stored in RAM during the call to ensure zero disk I/O latency during live reception.
-4.  **Batch Processing:** Once the connection closes (`on_close`), the buffer is flushed to a `.wav` file and added to the processing queue.
-5.  **Transcription:** The Model Worker process transcribes the file using the parameters (language, task, prompt) defined at that specific moment in the config.
+4.  **Immediate Persistence:** As soon as a connection hangs up, the memory buffer is flushed to a `.wav` file on disk. This happens *before* queuing for AI, ensuring that the file is safe and visible in the UI immediately, even if the AI worker is busy with previous tasks.
+5.  **Serialized Transcription:** The Model Worker process pulls from the queue and transcribes the already-saved files one by one.
 
 ---
 

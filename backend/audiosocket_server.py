@@ -41,6 +41,7 @@ except ImportError:
 
 import audiosocket_processor
 import model_manager
+import utils
 
 # ---------------------------------------------------------------------------
 # Global state — thread-safe
@@ -648,8 +649,32 @@ async def _connection_handler(
                 extra_stats={"debug": stats} if debug_enabled else None,
             )
 
+            # 1. Save WAV immediately (so next call doesn't wait for AI to see FILE SAVED)
+            try:
+                os.makedirs(out_dir, exist_ok=True)
+                wav_path = os.path.join(out_dir, "chunk_001.wav")
+                with _config_lock:
+                    sample_rate = _config.get("input_sample_rate", 8000)
+                    channels = _config.get("input_channels", 1)
+                    sample_width = _config.get("input_sample_width", 2)
+
+                audiosocket_processor.save_wav(
+                    wav_path, audio_buf, sample_rate, channels, sample_width
+                )
+                print(f"[AudioSocket] >>> FILE SAVED: {wav_path} (Session: {session_id[:8]})")
+                _emit_sync(
+                    "file_saved",
+                    {
+                        "uuid": session_id,
+                        "file_path": wav_path,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
+                )
+            except Exception as e:
+                print(f"[AudioSocket] Error saving immediate WAV: {e}")
+
             _processing_queue.put(
-                (session_id, bytes(audio_buf), out_dir, duration_s)
+                (session_id, None, out_dir, duration_s)
             )
             processing_started = True
         else:
@@ -764,45 +789,13 @@ async def _read_uuid_frame(reader: asyncio.StreamReader) -> str | None:
     return None
 
 
-def _save_wav(
-    path: str,
-    pcm_data: bytes,
-    sample_rate: int,
-    channels: int,
-    sample_width: int,
-) -> None:
-    """Save raw PCM bytes as a WAV file."""
-    with wave.open(path, "wb") as wf:
-        wf.setnchannels(channels)
-        wf.setsampwidth(sample_width)
-        wf.setframerate(sample_rate)
-        wf.writeframes(pcm_data)
-
-
-def _to_srt(segments: list, tag: str = "") -> str:
-    """Convert whisper-style segment list to SRT string."""
-    srt = []
-    for i, s in enumerate(segments):
-
-        def ts(x):
-            return (
-                f"{time.strftime('%H:%M:%S', time.gmtime(x))},"
-                f"{int((x % 1) * 1000):03d}"
-            )
-
-        txt = s["text"].strip()
-        srt.append(f"{i+1}\n{ts(s['start'])} --> {ts(s['end'])}\n{txt}\n")
-    return "\n".join(srt)
-
-
 def _process_session_blocking(
-    session_id: str, pcm_data: bytes, out_dir: str, duration_s: float
+    session_id: str, pcm_data_unused: any, out_dir: str, duration_s: float
 ) -> None:
     """
     Process a completed AudioSocket session:
-      1. Save WAV from raw PCM
-      2. Transcribe via model_manager
-      3. Save SRT / result metadata
+      1. Transcribe via model_manager
+      2. Save SRT / result metadata
     """
     processing_ok = False
     try:
@@ -810,10 +803,6 @@ def _process_session_blocking(
             cfg = dict(_config)
 
         whisper_opts = cfg.get("whisper", {})
-
-        sample_rate = cfg.get("input_sample_rate", 8000)
-        channels = cfg.get("input_channels", 1)
-        sample_width = cfg.get("input_sample_width", 2)
 
         wav_path = os.path.join(out_dir, "chunk_001.wav")
         orig_srt = os.path.join(out_dir, "chunk_001_orig.srt")
@@ -823,16 +812,23 @@ def _process_session_blocking(
             {"uuid": session_id, "duration_s": round(duration_s, 1)},
         )
 
-        # 1. Save WAV
-        _save_wav(wav_path, pcm_data, sample_rate, channels, sample_width)
-        print(f"[AudioSocket] WAV saved for session {session_id[:8]}")
-
-        # 2. Transcribe
+        # 1. Transcribe (WAV is already saved by _connection_handler)
         print(f"[AudioSocket] Transcribing session {session_id[:8]}")
+        if not os.path.exists(wav_path):
+            raise Exception(f"WAV file not found: {wav_path}")
+
         whisper_result = model_manager.transcribe(
             wav_path, options=whisper_opts
         )
-        segments = whisper_result.get("segments", [])
+        raw_segments = whisper_result.get("segments", [])
+        
+        # Apply music detection logic
+        min_gap = cfg.get("ai_min_music_gap", 3.0)
+        no_speech_threshold = cfg.get("ai_no_speech_threshold", 0.6)
+        segments = utils.process_segments_with_music(
+            raw_segments, min_gap, no_speech_threshold
+        )
+
         detected_lang = whisper_result.get("language", "") or "en"
         orig_text = " ".join(s["text"].strip() for s in segments)
         print(
@@ -851,7 +847,7 @@ def _process_session_blocking(
 
         # 3. Save SRT file
         with open(orig_srt, "w", encoding="utf-8") as f:
-            f.write(_to_srt(segments))
+            f.write(utils.to_srt(segments))
 
         # 4. REST Delivery
         delivery_cfg = cfg.get("delivery", {})
@@ -860,19 +856,6 @@ def _process_session_blocking(
             status_code = audiosocket_processor.deliver_session_zip_sync(
                 out_dir, cfg, session_id
             )
-            if status_code > 0:
-                print(
-                    f"[AudioSocket] Session {session_id[:8]} ZIP delivered "
-                    f"(HTTP {status_code})"
-                )
-                _emit_sync(
-                    "delivered",
-                    {
-                        "uuid": session_id,
-                        "chunk_idx": 1,
-                        "status_code": status_code,
-                    },
-                )
 
         # 5. Write result metadata
         result_path = os.path.join(out_dir, "result.json")

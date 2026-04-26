@@ -10,9 +10,9 @@
   <link rel="icon" href="/favicon.ico" type="image/x-icon">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css">
-  <link rel="stylesheet" href="/static/css/audiosocket.css">
-  <script src="/static/js/audiosocket.js" defer></script>
+  <link rel="stylesheet" href="/static/css/style.css?v=2">
+  <link rel="stylesheet" href="/static/css/audiosocket.css?v=2">
+  <script src="/static/js/audiosocket.js?v=2" defer></script>
 </head>
 
 <body>
@@ -105,15 +105,24 @@
 
     <!-- ── RIGHT: Session History ─────────────────────────────── -->
     <div>
-      <div class="card">
+      <div class="card" style="display:flex; flex-direction:column; max-height:75vh;">
         <div class="card-header">
           Session History
           <button class="btn btn-sm" style="background:#f1f5f9;color:#64748b;" onclick="loadHistory(historyPage)">
             🔄 Refresh
           </button>
         </div>
-        <div class="card-body" style="padding:12px;">
-          <div id="sessionList" class="history-list"></div>
+        <div class="card-body" style="padding:12px; flex:1; display:flex; flex-direction:column; overflow:hidden;">
+          <!-- Bulk actions -->
+          <div id="bulkActions" style="display:none; background:#fff1f2; padding:10px 12px; border-radius:8px; margin-bottom:12px; justify-content:space-between; align-items:center; border:1px solid #fecdd3;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <input type="checkbox" id="selectAll" onclick="toggleSelectAll()">
+              <span id="selectedCount" style="font-size:0.65rem; font-weight:700; color:#e11d48;">0 selected</span>
+            </div>
+            <button onclick="deleteSelectedSessions()" class="chunk-link" style="color:white; background:#e11d48; border-color:#e11d48; cursor:pointer;">DELETE SELECTED</button>
+          </div>
+
+          <div id="sessionList" class="history-list" style="flex:1;"></div>
           <div id="histPagination" class="pagination"></div>
         </div>
       </div>

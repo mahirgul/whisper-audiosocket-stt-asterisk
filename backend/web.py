@@ -1,7 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from contextlib import asynccontextmanager
 import os
 import psutil
@@ -16,10 +16,10 @@ import argparse
 import queue
 import zipfile
 import io
-from fastapi.responses import FileResponse, StreamingResponse
 import processor
 import model_manager
 import audiosocket_server as as_srv
+from datetime import datetime, timezone
 
 # ---------------------------------------------------------------------------
 # Startup / shutdown lifecycle
@@ -70,7 +70,7 @@ job_stats = {
     "cpu_usage": 0,
     "ram_usage_gb": 0,
     "ram_total_gb": round(psutil.virtual_memory().total / (1024**3), 1),
-    "current_task": "Waking up AI...",
+    "current_task": "Starting...",
 }
 
 
@@ -108,7 +108,7 @@ def get_safe_path(base_dir, user_input, is_file=True):
 
 
 # ---------------------------------------------------------------------------
-# Existing routes — unchanged
+# Existing routes
 # ---------------------------------------------------------------------------
 
 
@@ -178,10 +178,15 @@ async def get_history(page: int = 1, limit: int = 20):
                 meta_p = os.path.join(OUTPUT_DIR, fn)
                 with open(meta_p, "r", encoding="utf-8") as f:
                     meta = json.load(f)
+                    # Use meta 'time', or file mtime as float
+                    ts = meta.get("time")
+                    if ts is None:
+                        ts = os.path.getmtime(meta_p)
+                    
                     items.append(
                         {
                             "name": fn.replace(".json", ""),
-                            "time": meta.get("time", os.path.getmtime(meta_p)),
+                            "time": float(ts),
                             "url": meta.get("audio_url"),
                             "meta": meta,
                         }
@@ -189,7 +194,8 @@ async def get_history(page: int = 1, limit: int = 20):
             except Exception:
                 pass
 
-    items.sort(key=lambda x: x["time"], reverse=True)
+    # Sort by time descending (newest first)
+    items.sort(key=lambda x: x.get("time", 0) or 0, reverse=True)
     start = (page - 1) * limit
     end = start + limit
     return {
@@ -307,18 +313,38 @@ async def as_sessions(page: int = 1, limit: int = 20):
                             meta = json.load(f)
                     except Exception:
                         pass
+                # Ensure started is always a string (ISO format)
+                started_val = meta.get("started")
+                if not started_val:
+                    started_val = datetime.fromtimestamp(
+                        os.path.getmtime(entry.path), tz=timezone.utc
+                    ).isoformat()
+                else:
+                    started_val = str(started_val)
+
+                # Calculate fallback duration if missing
+                duration = meta.get("duration_s")
+                if not duration or duration == 0:
+                    wav_p = os.path.join(entry.path, "chunk_001.wav")
+                    if os.path.exists(wav_p):
+                        duration = os.path.getsize(wav_p) / 16000.0
+                    else:
+                        duration = 0
+
                 sessions.append(
                     {
                         "uuid": entry.name,
                         "status": meta.get("status", "unknown"),
-                        "started": meta.get("started"),
+                        "started": started_val,
                         "completed": meta.get("completed"),
                         "total_chunks": meta.get("total_chunks", 0),
-                        "duration_s": meta.get("duration_s"),
+                        "duration_s": float(duration or 0),
+                        "target_lang": meta.get("target_lang", "original"),
                     }
                 )
 
-    sessions.sort(key=lambda x: x.get("started") or "", reverse=True)
+    # Sort by started timestamp descending (newest first)
+    sessions.sort(key=lambda x: x["started"], reverse=True)
     start_idx = (page - 1) * limit
     end_idx = start_idx + limit
     return {
@@ -376,11 +402,39 @@ async def as_session_detail(session_uuid: str):
 @app.delete("/audiosocket/sessions/{session_uuid}")
 async def as_delete_session(session_uuid: str):
     """Delete an entire AudioSocket session folder."""
-    session_dir = get_safe_path(AUDIOSOCKET_DIR, session_uuid, is_file=False)
-    if not os.path.exists(session_dir):
-        raise HTTPException(status_code=404, detail="Session not found")
-    shutil.rmtree(session_dir)
-    return {"status": "deleted", "uuid": session_uuid}
+    try:
+        session_dir = get_safe_path(AUDIOSOCKET_DIR, session_uuid, is_file=False)
+        if not os.path.exists(session_dir):
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # On Windows, files might be locked. Try a retry or just ignore errors on single files.
+        shutil.rmtree(session_dir, ignore_errors=True)
+        
+        # Double check if it's gone
+        if os.path.exists(session_dir):
+             # If still exists, try one more time without ignoring errors to get the real exception
+             shutil.rmtree(session_dir)
+             
+        return {"status": "deleted", "uuid": session_uuid}
+    except Exception as e:
+        print(f"[Web] Error deleting session {session_uuid}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/audiosocket/bulk-delete")
+async def as_bulk_delete(session_uuids: list[str]):
+    """Delete multiple AudioSocket session folders."""
+    deleted_count = 0
+    for uuid_str in session_uuids:
+        try:
+            session_dir = get_safe_path(AUDIOSOCKET_DIR, uuid_str, is_file=False)
+            if os.path.exists(session_dir):
+                shutil.rmtree(session_dir, ignore_errors=True)
+                deleted_count += 1
+        except Exception as e:
+            print(f"[Web] Error in bulk delete for {uuid_str}: {e}")
+            continue
+    return {"status": "deleted", "count": deleted_count}
 
 
 @app.get("/audiosocket/sessions/{session_uuid}/download-zip")

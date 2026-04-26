@@ -192,6 +192,12 @@
               <input id="cfgDeliveryUrl" type="url" placeholder="http://your-server/api/receive-audio">
               <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Webhook destination URL.</div>
             </div>
+            <div class="form-group" style="margin-top: 15px;">
+              <label>Extra Fields (JSON) — use {uuid}</label>
+              <textarea id="cfgDeliveryExtra"
+                style="width:100%;height:80px;border-radius:8px;border:1px solid var(--border);padding:8px;font-family:monospace;font-size:0.72rem;">{"session_id": "{uuid}"}</textarea>
+              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Custom JSON payload fields.</div>
+            </div>
             <div class="form-row" style="margin-top: 15px;">
               <div class="form-group">
                 <label>HTTP Method</label>
@@ -201,21 +207,14 @@
                 </select>
               </div>
               <div class="form-group">
-                <label>Field Name (Multipart Form-Data)</label>
-                <input id="cfgDeliveryField" type="text" value="session_zip">
-                <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Key for the ZIP file in form-data.</div>
+                <label>Timeout (seconds)</label>
+                <input id="cfgDeliveryTimeout" type="number" value="30">
               </div>
             </div>
             <div class="form-group" style="margin-top: 15px;">
-              <label>Timeout (seconds)</label>
-              <input id="cfgDeliveryTimeout" type="number" value="30">
-              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Max wait time for delivery response.</div>
-            </div>
-            <div class="form-group" style="margin-top: 15px;">
-              <label>Extra Fields (JSON) — use {uuid}</label>
-              <textarea id="cfgDeliveryExtra"
-                style="width:100%;height:80px;border-radius:8px;border:1px solid var(--border);padding:8px;font-family:monospace;font-size:0.72rem;">{"session_id": "{uuid}"}</textarea>
-              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Custom JSON payload fields.</div>
+              <label>Field Name (Multipart Form-Data)</label>
+              <input id="cfgDeliveryField" type="text" value="session_zip">
+              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Key for the ZIP file in form-data.</div>
             </div>
           </div>
           <div id="deliveryPlaceholder" style="text-align: center; color: var(--muted); padding: 40px 0;">

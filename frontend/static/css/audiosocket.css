@@ -266,7 +266,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
+  min-height: 48px;
+}
+
+.session-time {
+  font-size: 0.50rem;
+  color: #475569;
+  font-weight: 600;
+  display: block;
+  margin-top: 2px;
 }
 
 .session-uuid {
@@ -280,10 +289,19 @@
 }
 
 .session-meta {
-  display: flex;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px 6px;
   align-items: center;
   flex-shrink: 0;
+  text-align: right;
+}
+
+.session-meta .tag {
+  margin: 0;
+  white-space: nowrap;
+  justify-content: center;
+  display: flex;
 }
 
 .tag {

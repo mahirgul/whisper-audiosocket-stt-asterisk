@@ -12,22 +12,11 @@ import aiohttp
 import time as _time
 import zipfile
 import os
+import utils
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def pcm_bytes_to_wav_bytes(
-    pcm_data: bytes, sample_rate: int, channels: int, sample_width: int
-) -> bytes:
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as wf:
-        wf.setnchannels(channels)
-        wf.setsampwidth(sample_width)
-        wf.setframerate(sample_rate)
-        wf.writeframes(pcm_data)
-    return buf.getvalue()
 
 
 def save_wav(
@@ -42,21 +31,6 @@ def save_wav(
         wf.setsampwidth(sample_width)
         wf.setframerate(sample_rate)
         wf.writeframes(pcm_data)
-
-
-def to_srt(segments: list, tag: str = "") -> str:
-    srt = []
-    for i, s in enumerate(segments):
-
-        def ts(x):
-            return (
-                f"{_time.strftime('%H:%M:%S', _time.gmtime(x))},"
-                f"{int((x % 1) * 1000):03d}"
-            )
-
-        txt = s["text"].strip()
-        srt.append(f"{i+1}\n{ts(s['start'])} --> {ts(s['end'])}\n{txt}\n")
-    return "\n".join(srt)
 
 
 def build_extra_fields(extra_fields: dict, uuid_str: str) -> dict:

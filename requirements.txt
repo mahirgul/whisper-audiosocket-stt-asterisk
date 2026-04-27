@@ -3,6 +3,7 @@ uvicorn
 python-multipart
 pydub
 openai-whisper
+faster-whisper
 torch
 torchaudio
 jinja2

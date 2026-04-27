@@ -256,16 +256,37 @@
             <div class="form-group">
               <label>Log Prob Threshold</label>
               <input id="cfgWhisperLogProb" type="number" step="0.1" value="-1.0">
+              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Often unnecessary with faster-whisper.</div>
             </div>
             <div class="form-group">
               <label>Compression Ratio</label>
               <input id="cfgWhisperComp" type="number" step="0.1" value="2.4">
+              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Often unnecessary with faster-whisper.</div>
+            </div>
+          </div>
+          <div class="form-row" style="margin-top: 15px;">
+            <div class="form-group">
+              <label>Beam Size</label>
+              <input id="cfgWhisperBeamSize" type="number" value="5">
+              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Accuracy (1=fastest, 5=best).</div>
+            </div>
+            <div class="form-group">
+              <label>Best Of</label>
+              <input id="cfgWhisperBestOf" type="number" value="5">
+              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Candidates per beam.</div>
             </div>
           </div>
           <div class="toggle-row" style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 15px;">
             <label for="cfgWhisperCondition">Condition on previous text</label>
             <label class="toggle">
               <input type="checkbox" id="cfgWhisperCondition" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="toggle-row" style="margin-top: 15px;">
+            <label for="cfgWhisperVadFilter">VAD Filter (Silero VAD - Faster-Whisper only)</label>
+            <label class="toggle">
+              <input type="checkbox" id="cfgWhisperVadFilter" checked>
               <span class="toggle-slider"></span>
             </label>
           </div>

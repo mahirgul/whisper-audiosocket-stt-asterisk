@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, FileResponse
@@ -30,6 +30,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--model", type=str, default="medium", help="Whisper model to use"
 )
+parser.add_argument(
+    "--engine", type=str, default="openai", choices=["openai", "faster"], help="Whisper engine to use"
+)
 args, unknown = parser.parse_known_args()
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -45,7 +48,7 @@ AUDIOSOCKET_CONFIG = os.path.join(BASE_DIR, "audiosocket.json")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Start the shared Whisper model worker process
-    model_manager.start(args.model)
+    model_manager.start(args.model, args.engine)
     # Tell the AudioSocket server where the project root is
     as_srv.set_base_dir(BASE_DIR)
     config_path = os.path.join(BASE_DIR, "audiosocket.json")
@@ -86,6 +89,18 @@ def update_stats():
         job_stats["ram_usage_gb"] = round(
             psutil.virtual_memory().used / (1024**3), 2
         )
+        
+        # Include active tasks for the task list UI
+        with model_manager._pending_lock:
+            tasks = []
+            for req_id, entry in model_manager._pending.items():
+                tasks.append({
+                    "id": req_id,
+                    "label": entry.get("label", "Unknown"),
+                    "elapsed": round(time.time() - entry.get("start_time", time.time()), 1)
+                })
+            job_stats["active_tasks"] = tasks
+
         time.sleep(1)
 
 
@@ -124,9 +139,31 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.close()
 
 
+@app.get("/tasks")
+async def get_tasks():
+    with model_manager._pending_lock:
+        tasks = []
+        for req_id, entry in model_manager._pending.items():
+            tasks.append({
+                "id": req_id,
+                "label": entry.get("label", "Unknown"),
+                "elapsed": round(time.time() - entry.get("start_time", time.time()), 1)
+            })
+        return {
+            "active_tasks": tasks,
+            "count": len(tasks),
+            "engine": model_manager._engine
+        }
+
+
 @app.post("/transcribe")
-async def transcribe(file: UploadFile = File(...)):
+async def transcribe(
+    file: UploadFile = File(...),
+    initial_prompt: str = Form(None),
+    task: str = Form("transcribe"),
+):
     job_id = str(uuid.uuid4())
+    filename = file.filename
     fd, tmp_path = tempfile.mkstemp(suffix=".wav")
     os.close(fd)
     try:
@@ -139,7 +176,11 @@ async def transcribe(file: UploadFile = File(...)):
         audio_url = f"/outputs/{job_id}.wav"
 
         results = await processor.transcribe_audio(
-            tmp_path, output_dir=OUTPUT_DIR
+            tmp_path,
+            output_dir=OUTPUT_DIR,
+            label=filename,
+            initial_prompt=initial_prompt,
+            task=task,
         )
 
         # Save metadata for history
@@ -164,7 +205,6 @@ async def transcribe(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        processor.model_status = "idle"
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
@@ -522,4 +562,5 @@ app.mount(
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000, access_log=False)
+

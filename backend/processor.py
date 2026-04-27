@@ -35,7 +35,9 @@ def load_ai_config():
     return {}
 
 
-async def transcribe_audio(file_path, output_dir="outputs"):
+async def transcribe_audio(
+    file_path, output_dir="outputs", label="Task", initial_prompt=None, task="transcribe"
+):
     if model_manager.model_status == "loading":
         raise Exception("AI Model is still loading. Please wait a moment...")
 
@@ -44,6 +46,10 @@ async def transcribe_audio(file_path, output_dir="outputs"):
     no_speech_threshold = cfg.get("ai_no_speech_threshold", 0.6)
 
     whisper_opts = cfg.get("whisper", {})
+    if initial_prompt:
+        whisper_opts["initial_prompt"] = initial_prompt
+    
+    whisper_opts["task"] = task
 
     unique_id = str(uuid.uuid4())[:8]
     audio = AudioSegment.from_file(file_path)
@@ -57,13 +63,24 @@ async def transcribe_audio(file_path, output_dir="outputs"):
     # Transcribe L & R via the shared model process
     l_path = file_path + "_l.wav"
     channels[0].export(l_path, format="wav")
-    res_l = await model_manager.transcribe_async(l_path, options=whisper_opts)
+    
+    # Update status for feedback
+    model_manager.model_status = "processing"
+    model_manager.current_task = f"AI: Transcribing Left Channel ({label})..."
+    
+    res_l = await model_manager.transcribe_async(l_path, options=whisper_opts, label=f"{label} (L)")
     os.unlink(l_path)
 
     r_path = file_path + "_r.wav"
     channels[1].export(r_path, format="wav")
-    res_r = await model_manager.transcribe_async(r_path, options=whisper_opts)
+    
+    # Update status for feedback
+    model_manager.current_task = f"AI: Transcribing Right Channel ({label})..."
+    
+    res_r = await model_manager.transcribe_async(r_path, options=whisper_opts, label=f"{label} (R)")
     os.unlink(r_path)
+
+    model_manager.current_task = "AI: Finalizing results..."
 
     segs_l = utils.process_segments_with_music(
         res_l.get("segments", []), min_gap, no_speech_threshold

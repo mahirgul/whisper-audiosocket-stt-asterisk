@@ -51,25 +51,34 @@ if "%choice%"=="D" goto download_all
 if "%choice%"=="" set WHISPER_MODEL=medium
 
 echo.
+echo Please select Whisper Engine:
+echo [1] OpenAI Whisper (Standard)
+echo [2] Faster-Whisper  (High Performance, Optimized, default)
+echo.
+set /p engine_choice="Enter engine choice (1-2) [Default: 2]: "
+
+set WHISPER_ENGINE=faster
+if "%engine_choice%"=="1" set WHISPER_ENGINE=openai
+
+echo.
 echo Checking model files for %WHISPER_MODEL%...
 if not exist "models\whisper\%WHISPER_MODEL%.pt" (
-    echo.
-    echo --- WARNING: %WHISPER_MODEL% model not found locally. ---
-    echo It will be downloaded automatically on first run.
-    echo This may take several minutes depending on your internet speed.
-    echo Please DO NOT close this window.
-    echo --------------------------------------------------------
+    if "%WHISPER_ENGINE%"=="openai" (
+        echo.
+        echo --- WARNING: %WHISPER_MODEL% model not found locally. ---
+        echo It will be downloaded automatically on first run.
+        echo --------------------------------------------------------
+    )
 )
 
-echo Starting application...
-echo Models will be stored in 'models/whisper' directory.
+echo Starting application (%WHISPER_ENGINE% engine)...
 echo.
 echo Server is starting... 
 echo Local: http://localhost:8000
 echo.
 
 call venv\Scripts\activate.bat
-python backend\web.py --model %WHISPER_MODEL%
+python backend\web.py --model %WHISPER_MODEL% --engine %WHISPER_ENGINE%
 goto end
 
 :download_all

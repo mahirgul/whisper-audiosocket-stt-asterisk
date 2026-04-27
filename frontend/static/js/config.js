@@ -88,7 +88,10 @@ function gatherConfig() {
       logprob_threshold:          parseFloat(getVal("cfgWhisperLogProb")) || -1.0,
       compression_ratio_threshold: parseFloat(getVal("cfgWhisperComp")) || 2.4,
       condition_on_previous_text:  getChecked("cfgWhisperCondition"),
-      initial_prompt:              getVal("cfgWhisperPrompt") || ""
+      initial_prompt:              getVal("cfgWhisperPrompt") || "",
+      beam_size:                   parseInt(getVal("cfgWhisperBeamSize")) || 5,
+      best_of:                     parseInt(getVal("cfgWhisperBestOf")) || 5,
+      vad_filter:                  getChecked("cfgWhisperVadFilter")
     },
 
     delivery: {

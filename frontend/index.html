@@ -61,6 +61,14 @@
                 </div>
                 <div id="setupArea">
                     <div id="fileTab" class="tab-content active">
+                        <div class="form-group" style="margin-bottom: 15px;">
+                            <label style="font-size: 0.7rem; font-weight: 800; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; display: block;">Initial Prompt (Optional Context)</label>
+                            <textarea id="uploadPrompt" style="width:100%;height:60px;border-radius:8px;border:1px solid var(--border);padding:8px;font-size:0.75rem;" placeholder="e.g. Technical meeting about Asterisk, AudioSocket, AI..."></textarea>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="translateToEn" style="width: 16px; height: 16px; cursor: pointer;">
+                            <label for="translateToEn" style="font-size: 0.75rem; font-weight: 700; color: var(--foreground); cursor: pointer;">Translate to English (Auto-detect Language)</label>
+                        </div>
                         <div id="uploadArea" class="drop-zone" onclick="document.getElementById('f').click()">
                             <div id="fL">Drop Stereo Audio or Click to Upload</div>
                             <input type="file" id="f" accept="audio/*" onchange="start()" style="display:none">
@@ -68,7 +76,8 @@
                     </div>
                 </div>
 
-                <div id="loadingBar">...</div>
+                <!-- Active Task List -->
+                <div id="taskList" class="task-list"></div>
 
                 <!-- Player -->
                 <div id="playerCard" class="player-card">
@@ -114,6 +123,14 @@
             </div><!-- /.card-body -->
         </div><!-- /.history-panel -->
     </div><!-- /.container -->
+
+    <!-- Global Persistent Status Bar -->
+    <div id="globalStatus" class="global-status-bar" style="display:none;">
+        <div class="status-content">
+            <div class="spinner-sm"></div>
+            <span id="globalStatusText">Processing audio...</span>
+        </div>
+    </div>
 
 <footer>
     <div class="footer-content">

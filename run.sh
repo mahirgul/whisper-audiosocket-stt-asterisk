@@ -41,9 +41,21 @@ case $choice in
 esac
 
 echo ""
-echo "Starting application with model: $WHISPER_MODEL..."
+echo "Please select Whisper Engine:"
+echo "[1] OpenAI Whisper (Standard)"
+echo "[2] Faster-Whisper  (High Performance, Optimized, default)"
+echo ""
+read -p "Enter engine choice (1-2) [Default: 2]: " engine_choice
+
+case $engine_choice in
+    1) WHISPER_ENGINE="openai" ;;
+    *) WHISPER_ENGINE="faster" ;;
+esac
+
+echo ""
+echo "Starting application with model: $WHISPER_MODEL ($WHISPER_ENGINE engine)..."
 echo "Local Dashboard: http://localhost:8000"
 echo ""
 
 source venv/bin/activate
-python3 backend/web.py --model $WHISPER_MODEL
+python3 backend/web.py --model $WHISPER_MODEL --engine $WHISPER_ENGINE

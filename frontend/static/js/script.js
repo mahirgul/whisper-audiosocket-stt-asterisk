@@ -14,7 +14,54 @@ async function checkStatus() {
         }
         document.getElementById('sTask').innerText = taskText;
         document.getElementById('modelOverlay').style.display = (d.status === "loading") ? 'flex' : 'none';
+
+        // UI Logic for refresh safety:
+        // Keep setupArea visible so user can keep uploading
+        const setup = document.getElementById('setupArea');
+        const player = document.getElementById('playerCard');
+        const activeTasks = d.active_tasks || [];
+        
+        setup.style.display = 'block'; 
+
+        // If a player is active, we might want to keep it, but setup stays too
+        if (player.style.display === 'block') {
+            // player is already visible, no need to change
+        }
+
+        renderTaskList(activeTasks, taskText);
+
+        // Persistent Global Status Bar handling
+        const gBar = document.getElementById('globalStatus');
+        const gText = document.getElementById('globalStatusText');
+        if (d.status === "processing") {
+            gBar.style.display = 'flex';
+            gText.innerText = taskText;
+        } else {
+            gBar.style.display = 'none';
+        }
     } catch(e){}
+}
+
+function renderTaskList(tasks, currentWorkerTask) {
+    const container = document.getElementById('taskList');
+    if (!tasks || tasks.length === 0) {
+        container.innerHTML = "";
+        return;
+    }
+
+    container.innerHTML = tasks.map((t, idx) => {
+        // The first task in model_manager._pending is usually the one being processed
+        // We can correlate with currentWorkerTask for more detail
+        const isProcessing = idx === 0; 
+        const status = isProcessing ? currentWorkerTask : "In Queue";
+        
+        return `
+            <div class="task-item">
+                <div class="task-name" title="${t.label}">${t.label}</div>
+                <div class="task-status">${status}</div>
+            </div>
+        `;
+    }).join('');
 }
 
 // Stats Interval
@@ -199,19 +246,22 @@ function resetUI() {
 async function start() {
     const file = document.getElementById('f').files[0];
     if(!file) return;
-    handleProcessing('/transcribe', { file });
+    const prompt = document.getElementById('uploadPrompt') ? document.getElementById('uploadPrompt').value : "";
+    const translate = document.getElementById('translateToEn') && document.getElementById('translateToEn').checked;
+    
+    handleProcessing('/transcribe', { 
+        file, 
+        initial_prompt: prompt,
+        task: translate ? "translate" : "transcribe"
+    });
 }
 
 async function handleProcessing(endpoint, payload) {
-    document.getElementById('setupArea').style.display = 'none';
+    document.getElementById('setupArea').style.display = 'block'; // Keep visible
     document.getElementById('resultsGrid').style.display = 'none';
     document.getElementById('playerCard').style.display = 'none';
     document.getElementById('boxOL').innerText = "...";
     document.getElementById('boxOR').innerText = "...";
-
-    const bar = document.getElementById('loadingBar');
-    bar.style.display = 'block';
-    bar.innerText = "Processing...";
 
     const fd = new FormData();
     for(let key in payload) fd.append(key, payload[key]);
@@ -219,6 +269,7 @@ async function handleProcessing(endpoint, payload) {
     try {
         const res = await fetch(endpoint, { method: 'POST', body: fd });
         const data = await res.json();
+        
         if(data.error || data.detail) throw new Error(data.error || data.detail);
 
         document.getElementById('boxOL').innerText = data.orig_l;
@@ -230,16 +281,13 @@ async function handleProcessing(endpoint, payload) {
             document.getElementById('playingLabel').innerText = data.audio_url.split('/').pop();
             document.getElementById('playerCard').style.display = 'block';
             document.getElementById('btnNew').style.display = 'block';
-            bar.style.display = 'none';
             await loadHistory(1); 
         } else {
-            bar.style.display = 'none';
             document.getElementById('btnNew').style.display = 'block';
         }
     } catch(e) {
         alert("ERROR: " + e.message);
-        resetUI();
-        bar.style.display = 'none';
+        // On error, let the user stay on the page to try again
     }
 }
 

@@ -20,7 +20,10 @@
     "compression_ratio_threshold": 2.4,
     "condition_on_previous_text": true,
     "initial_prompt": "",
-    "task": "transcribe"
+    "task": "transcribe",
+    "vad_filter": true,
+    "beam_size": 5,
+    "best_of": 5
   },
   "delivery": {
     "enabled": false,

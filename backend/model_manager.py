@@ -24,6 +24,7 @@ import threading
 import os
 import sys
 import uuid
+import time
 import traceback
 
 # ---------------------------------------------------------------------------
@@ -45,6 +46,7 @@ model_status: str = "loading"
 current_task: str = "Waking up AI..."
 
 _model_name: str = "medium"
+_engine: str = "openai"
 
 
 # ---------------------------------------------------------------------------
@@ -52,14 +54,15 @@ _model_name: str = "medium"
 # ---------------------------------------------------------------------------
 
 
-def start(model_name: str = "medium") -> None:
+def start(model_name: str = "medium", engine: str = "openai") -> None:
     """Start the model worker process (call once at app startup)."""
     global _process, _request_queue, _response_queue, _listener_thread
-    global model_status, current_task, _model_name
+    global model_status, current_task, _model_name, _engine
 
     _model_name = model_name
+    _engine = engine
     model_status = "loading"
-    current_task = f"Loading {model_name} model..."
+    current_task = f"Loading {model_name} ({engine})..."
 
     model_dir = os.path.join(os.getcwd(), "models", "whisper")
     os.makedirs(model_dir, exist_ok=True)
@@ -69,12 +72,12 @@ def start(model_name: str = "medium") -> None:
 
     _process = multiprocessing.Process(
         target=_worker_main,
-        args=(_request_queue, _response_queue, model_name, model_dir),
+        args=(_request_queue, _response_queue, model_name, model_dir, engine),
         daemon=True,
         name="WhisperModelWorker",
     )
     _process.start()
-    print(f"[ModelManager] Worker process started (PID {_process.pid})")
+    print(f"[ModelManager] Worker process started (PID {_process.pid}, engine={engine})")
 
     # Background thread routes responses back to callers
     _listener_thread = threading.Thread(
@@ -115,16 +118,10 @@ def stop() -> None:
 
 
 def transcribe(
-    audio_path: str, *, timeout: float = 300.0, options: dict | None = None
+    audio_path: str, *, timeout: float = 300.0, options: dict | None = None, label: str = "Task"
 ) -> dict:
     """
     Thread-safe transcription request.
-
-    Sends the audio file path to the model worker and blocks until the
-    result is ready.  Returns a dict with keys:
-        segments, text, language
-
-    Raises RuntimeError on model error or timeout.
     """
     global model_status, current_task
 
@@ -133,13 +130,13 @@ def transcribe(
 
     req_id = uuid.uuid4().hex
     event = threading.Event()
-    entry = {"event": event, "result": None}
+    entry = {"event": event, "result": None, "label": label, "start_time": time.time()}
 
     with _pending_lock:
         _pending[req_id] = entry
         # Immediate status update for pollers
         model_status = "processing"
-        current_task = "Transcribing..."
+        current_task = f"Transcribing {label}..."
 
     _request_queue.put(
         {"id": req_id, "audio_path": audio_path, "options": options or {}}
@@ -161,13 +158,13 @@ def transcribe(
 
 
 async def transcribe_async(
-    audio_path: str, *, timeout: float = 300.0, options: dict | None = None
+    audio_path: str, *, timeout: float = 300.0, options: dict | None = None, label: str = "Task"
 ) -> dict:
     """Async wrapper for transcribe()."""
     import asyncio
 
     return await asyncio.to_thread(
-        transcribe, audio_path, timeout=timeout, options=options
+        transcribe, audio_path, timeout=timeout, options=options, label=label
     )
 
 
@@ -219,6 +216,7 @@ def _worker_main(
     resp_q: multiprocessing.Queue,
     model_name: str,
     model_dir: str,
+    engine: str = "openai",
 ) -> None:
     """Entry point for the model worker process."""
     # Fix encoding on Windows
@@ -228,43 +226,41 @@ def _worker_main(
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
     try:
-        import whisper
         import torch
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"[ModelWorker] System device: {device.upper()}")
+        print(f"[ModelWorker] Engine: {engine.upper()}, Device: {device.upper()}")
 
-        # Check if model file exists on disk
-        model_path = os.path.join(model_dir, f"{model_name}.pt")
-        if os.path.exists(model_path):
-            resp_q.put(
-                {
-                    "type": "status",
-                    "status": "loading",
-                    "task": (
-                        f"Loading {model_name} model from disk "
-                        f"({device})..."
-                    ),
-                }
+        resp_q.put(
+            {
+                "type": "status",
+                "status": "loading",
+                "task": f"Loading {model_name} ({engine})...",
+            }
+        )
+
+        model = None
+        if engine == "faster":
+            from faster_whisper import WhisperModel
+
+            # Faster-whisper uses compute_type for quantization
+            compute_type = "float16" if device == "cuda" else "int8"
+            print(f"[ModelWorker] Loading faster-whisper '{model_name}' ({compute_type}) ...")
+            model = WhisperModel(
+                model_name,
+                device=device,
+                compute_type=compute_type,
+                download_root=model_dir,
             )
         else:
-            resp_q.put(
-                {
-                    "type": "status",
-                    "status": "loading",
-                    "task": (
-                        f"Downloading {model_name} model "
-                        "(this may take a while)..."
-                    ),
-                }
+            import whisper
+
+            print(f"[ModelWorker] Loading openai-whisper '{model_name}' ...")
+            model = whisper.load_model(
+                model_name, device=device, download_root=model_dir
             )
 
-        print(f"[ModelWorker] Loading Whisper '{model_name}' on {device} ...")
-        model = whisper.load_model(
-            model_name, device=device, download_root=model_dir
-        )
         print("[ModelWorker] Model loaded. Ready for requests.")
-
         resp_q.put({"type": "status", "status": "idle", "task": "Ready"})
 
     except Exception as e:
@@ -291,20 +287,64 @@ def _worker_main(
             )
 
             try:
-                # Determine FP16 based on device to suppress CPU warnings
-                if "fp16" not in options:
-                    options["fp16"] = device == "cuda"
+                if engine == "faster":
+                    # Map openai options to faster-whisper options
+                    if "logprob_threshold" in options:
+                        options["log_prob_threshold"] = options.pop("logprob_threshold")
+                    
+                    segments_gen, info = model.transcribe(audio_path, **options)
+                    
+                    duration = info.duration
+                    segments = []
+                    text_parts = []
+                    
+                    for s in segments_gen:
+                        seg_dict = {
+                            "start": s.start,
+                            "end": s.end,
+                            "text": s.text,
+                            "avg_logprob": s.avg_logprob,
+                            "no_speech_prob": s.no_speech_prob,
+                        }
+                        segments.append(seg_dict)
+                        text_parts.append(s.text)
+                        
+                        # Calculate progress percentage
+                        if duration > 0:
+                            pct = min(99, int((s.end / duration) * 100))
+                            resp_q.put({
+                                "type": "status", 
+                                "status": "processing", 
+                                "task": f"Transcribing... {pct}%"
+                            })
+                    
+                    resp_q.put(
+                        {
+                            "type": "result",
+                            "id": req_id,
+                            "segments": segments,
+                            "text": "".join(text_parts),
+                            "language": info.language,
+                        }
+                    )
+                else:
+                    # Determine FP16 based on device to suppress CPU warnings
+                    if "fp16" not in options:
+                        options["fp16"] = device == "cuda"
 
-                result = model.transcribe(audio_path, **options)
-                resp_q.put(
-                    {
-                        "type": "result",
-                        "id": req_id,
-                        "segments": result.get("segments", []),
-                        "text": result.get("text", ""),
-                        "language": result.get("language", ""),
-                    }
-                )
+                    # Remove unsupported options for openai whisper
+                    options.pop("vad_filter", None)
+
+                    result = model.transcribe(audio_path, **options)
+                    resp_q.put(
+                        {
+                            "type": "result",
+                            "id": req_id,
+                            "segments": result.get("segments", []),
+                            "text": result.get("text", ""),
+                            "language": result.get("language", ""),
+                        }
+                    )
             except Exception as e:
                 traceback.print_exc()
                 resp_q.put(

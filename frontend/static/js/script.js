@@ -13,7 +13,6 @@ async function checkStatus() {
             taskText = "Idle";
         }
         document.getElementById('sTask').innerText = taskText;
-        document.getElementById('modelOverlay').style.display = (d.status === "loading") ? 'flex' : 'none';
 
         // UI Logic for refresh safety:
         // Keep setupArea visible so user can keep uploading
@@ -26,6 +25,16 @@ async function checkStatus() {
         // If a player is active, we might want to keep it, but setup stays too
         if (player.style.display === 'block') {
             // player is already visible, no need to change
+        }
+
+        // System Logs
+        const logContainer = document.getElementById('systemLogList');
+        if (logContainer && d.system_logs) {
+            const currentContent = logContainer.innerText;
+            const newContent = d.system_logs.join('\n');
+            if (currentContent !== newContent && d.system_logs.length > 0) {
+                logContainer.innerText = newContent;
+            }
         }
 
         renderTaskList(activeTasks, taskText);

@@ -50,10 +50,13 @@
       gap: 8px;
     }
   </style>
+  <script src="/static/js/header.js" defer></script>
   <script src="/static/js/config.js" defer></script>
 </head>
 
 <body>
+
+  <div id="toast" class="toast"></div>
 
   <!-- Shared topbar navigation -->
   <nav class="topbar">
@@ -70,6 +73,10 @@
       <a href="/audiosocket.html"><span class="nav-icon">📡</span> AudioSocket</a>
       <a href="/config.html" class="active"><span class="nav-icon">⚙️</span> Config</a>
     </div>
+    <div class="topbar-right">
+        <div id="aiStatusDot" style="width:10px; height:10px; border-radius:50%; background:#94a3b8;"></div>
+        <span id="aiStatusText" style="font-size:0.7rem; font-weight:800; color:var(--muted); text-transform:uppercase;">AI Offline</span>
+    </div>
   </nav>
 
   <div class="container" style="max-width: 1400px; grid-template-columns: 1fr; display: block; margin-top: 20px;">
@@ -82,10 +89,72 @@
 
     <div class="config-grid">
       
-      <!-- 0. AI Provider (API / Local) -->
+      <!-- 0. Model Selection & Engine (Moved to Top) -->
       <div class="card config-card">
         <div class="card-header">
-          <div class="section-title">🤖 AI Transcription Provider</div>
+          <div class="section-title">🤖 AI Model & Engine Selection</div>
+        </div>
+        <div class="card-body">
+          <!-- Hidden inputs to maintain compatibility with gatherConfig() -->
+          <input type="hidden" id="cfgWhisperEngine" value="faster">
+          <input type="hidden" id="cfgWhisperModel" value="medium">
+
+          <div style="margin-bottom: 20px;">
+            <label style="font-size:0.65rem; font-weight:900; color:var(--muted); text-transform:uppercase; margin-bottom:8px; display:block;">1. Select AI Engine</label>
+            <select id="engineListBox" size="2" style="width:100%; border-radius:10px; border:1px solid var(--border); padding:5px; background:var(--bg); font-family:inherit; font-size:0.8rem; cursor:pointer;" onchange="onEngineChange()">
+              <option value="faster" selected>Faster-Whisper (High Performance)</option>
+              <option value="openai">OpenAI Whisper (Standard)</option>
+            </select>
+          </div>
+
+          <div id="modelSelectionList" style="margin-top:0px; border-radius:10px; border:1px solid var(--border); overflow:hidden;">
+            <div style="display:grid; grid-template-columns: 1.5fr 1fr 1.5fr; padding:10px 15px; background:var(--bg); border-bottom:1px solid var(--border); font-size:0.65rem; font-weight:900; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">
+              <div>Model Name</div>
+              <div>Status</div>
+              <div style="text-align:right;">Actions</div>
+            </div>
+            <div id="modelItems" style="background:var(--surface);">
+              <!-- Rendered via config.js -->
+              <div style="padding:20px; text-align:center; color:var(--muted); font-size:0.8rem;">Select an engine to see models...</div>
+            </div>
+          </div>
+
+          <div class="form-row" style="margin-top: 15px; border-top: 1px solid var(--border); padding-top: 15px;">
+            <div class="form-group">
+              <label>Local Whisper Device</label>
+              <select id="cfgLocalDevice">
+                <option value="auto">Auto (Detect CUDA)</option>
+                <option value="cuda">CUDA (GPU)</option>
+                <option value="cpu">CPU</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Local Compute Type</label>
+              <select id="cfgLocalCompute">
+                <option value="default">Default Precision</option>
+                <option value="float16">float16</option>
+                <option value="float32">float32</option>
+                <option value="int8">int8 (Quantized)</option>
+                <option value="int8_float16">int8_float16</option>
+                <option value="int16">int16</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="toggle-row" style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 15px;">
+            <label for="cfgAutoRestart">Auto-Restart AI Worker (Watchdog)</label>
+            <label class="toggle">
+              <input type="checkbox" id="cfgAutoRestart" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- 1. AI Transcription Provider -->
+      <div class="card config-card">
+        <div class="card-header">
+          <div class="section-title">☁️ AI Provider (Local / Cloud API)</div>
         </div>
         <div class="card-body">
           <div class="form-group">
@@ -113,17 +182,25 @@
                 <input id="cfgApiBaseUrl" type="text" placeholder="https://api.openai.com/v1">
                 <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">OpenAI compatible API base endpoint URL.</div>
               </div>
-              <div class="form-group" style="margin-top: 15px;">
-                <label>API Model Name</label>
-                <input id="cfgApiModelName" type="text" placeholder="whisper-1">
-                <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">API model identifier.</div>
-              </div>
+            </div>
+            
+            <div class="form-group" style="margin-top: 15px;" id="apiModelSelectGroup">
+              <label>API Model Selection</label>
+              <select id="cfgApiModelSelect" onchange="onApiModelSelectChange(this.value)">
+                <!-- Populated dynamically via JS -->
+              </select>
+            </div>
+            
+            <div class="form-group" style="margin-top: 15px; display:none;" id="customModelInputGroup">
+              <label>API Model Name</label>
+              <input id="cfgApiModelName" type="text" placeholder="whisper-1">
+              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">API model identifier.</div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- 1. AudioSocket Server -->
+      <!-- 2. AudioSocket Server -->
       <div class="card config-card">
         <div class="card-header">
           <div class="section-title">📡 AudioSocket Server</div>
@@ -148,48 +225,28 @@
             <label>Transcription Mode</label>
             <select id="cfgTransMode">
               <option value="on_close">On Close (Process full audio after hangup)</option>
+              <option value="online">Online (Real-time streaming transcription)</option>
             </select>
             <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Defines when the transcription starts.</div>
           </div>
         </div>
       </div>
 
-      <!-- 2. Input Format -->
+      <!-- 2b. FastAPI Web Server -->
       <div class="card config-card">
         <div class="card-header">
-          <div class="section-title">🔊 Input Format (PCM)</div>
+          <div class="section-title">🌐 FastAPI Web Server</div>
         </div>
         <div class="card-body">
-          <div class="form-row">
-            <div class="form-group">
-              <label>Sample Rate (Hz)</label>
-              <input id="cfgSampleRate" type="number" value="8000">
-              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Input audio sampling rate.</div>
-            </div>
-            <div class="form-group">
-              <label>Channels</label>
-              <input id="cfgChannels" type="number" value="1" min="1" max="2">
-              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">1=Mono, 2=Stereo.</div>
-            </div>
+          <div class="form-group">
+            <label>Web Listen Port</label>
+            <input id="cfgWebPort" type="number" value="8000" min="1024" max="65535">
+            <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">TCP port for this web interface and API endpoints.</div>
           </div>
           <div class="form-group" style="margin-top: 15px;">
-            <label>Sample Width (bytes, 1/2/4)</label>
-            <input id="cfgSampleWidth" type="number" value="2" min="1" max="4">
-            <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Bytes per sample (e.g., 2 for 16-bit).</div>
-          </div>
-          <div class="toggle-row" style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 15px;">
-            <label for="cfgDebugMode">Debug Mode (Enable verbose logging & extra stats)</label>
-            <label class="toggle">
-              <input type="checkbox" id="cfgDebugMode">
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-          <div class="toggle-row" style="margin-top: 15px;">
-            <label for="cfgEndianSwap">Force Endian Swap (Big to Little Endian)</label>
-            <label class="toggle">
-              <input type="checkbox" id="cfgEndianSwap" checked>
-              <span class="toggle-slider"></span>
-            </label>
+            <label>Web Bind Address</label>
+            <input id="cfgWebHost" type="text" value="0.0.0.0">
+            <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">IP address to bind the web server (e.g., 0.0.0.0 or 127.0.0.1).</div>
           </div>
         </div>
       </div>
@@ -234,57 +291,72 @@
         </div>
       </div>
 
-      <!-- 4. External Delivery -->
+      <!-- 4. Advanced AI (Music/Silence) -->
       <div class="card config-card">
         <div class="card-header">
-          <div class="section-title">🌐 External Delivery</div>
-          <label class="toggle">
-            <input type="checkbox" id="cfgDeliveryEnabled" onchange="toggleDeliverySection(this.checked)">
-            <span class="toggle-slider"></span>
-          </label>
+          <div class="section-title">🤖 Advanced Audio Logic</div>
         </div>
         <div class="card-body">
-          <div id="deliverySection" style="display:none;">
-            <div class="form-group">
-              <label>Endpoint URL</label>
-              <input id="cfgDeliveryUrl" type="url" placeholder="http://your-server/api/receive-audio">
-              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Webhook destination URL.</div>
-            </div>
-            <div class="form-group" style="margin-top: 15px;">
-              <label>Extra Fields (JSON) — use {uuid}</label>
-              <textarea id="cfgDeliveryExtra"
-                style="width:100%;height:80px;border-radius:8px;border:1px solid var(--border);padding:8px;font-family:monospace;font-size:0.72rem;">{"session_id": "{uuid}"}</textarea>
-              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Custom JSON payload fields.</div>
-            </div>
-            <div class="form-row" style="margin-top: 15px;">
-              <div class="form-group">
-                <label>HTTP Method</label>
-                <select id="cfgDeliveryMethod">
-                  <option value="POST">POST</option>
-                  <option value="PUT">PUT</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Timeout (seconds)</label>
-                <input id="cfgDeliveryTimeout" type="number" value="30">
-              </div>
-            </div>
-            <div class="form-group" style="margin-top: 15px;">
-              <label>Field Name (Multipart Form-Data)</label>
-              <input id="cfgDeliveryField" type="text" value="session_zip">
-              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Key for the ZIP file in form-data.</div>
-            </div>
+          <div class="form-group">
+            <label>AI Music Detection (0.0 - 1.0)</label>
+            <input id="cfgAiNoSpeech" type="number" step="0.1" min="0" max="1" value="0.6">
+            <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Used for [MUSIC] tag generation.</div>
           </div>
-          <div id="deliveryPlaceholder" style="text-align: center; color: var(--muted); padding: 40px 0;">
-             Webhook delivery is currently disabled.
+          <div class="form-group" style="margin-top: 15px;">
+            <label>Min Silence for [MUSIC] (sec)</label>
+            <input id="cfgAiMinGap" type="number" step="0.5" min="0" value="3.0">
+          </div>
+          <div class="form-group" style="margin-top: 15px;">
+            <label>Silence Frame Duration (ms)</label>
+            <input id="cfgSilenceFrameMs" type="number" step="10" min="10" max="1000" value="20">
           </div>
         </div>
       </div>
 
-      <!-- 5. Transcription -->
+      <!-- 5. Input Format -->
       <div class="card config-card">
         <div class="card-header">
-          <div class="section-title">📝 Transcription</div>
+          <div class="section-title">🔊 Input Format (PCM)</div>
+        </div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Sample Rate (Hz)</label>
+              <input id="cfgSampleRate" type="number" value="8000">
+              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Input audio sampling rate.</div>
+            </div>
+            <div class="form-group">
+              <label>Channels</label>
+              <input id="cfgChannels" type="number" value="1" min="1" max="2">
+              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">1=Mono, 2=Stereo.</div>
+            </div>
+          </div>
+          <div class="form-group" style="margin-top: 15px;">
+            <label>Sample Width (bytes, 1/2/4)</label>
+            <input id="cfgSampleWidth" type="number" value="2" min="1" max="4">
+            <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Bytes per sample (e.g., 2 for 16-bit).</div>
+          </div>
+          <div class="toggle-row" style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 15px;">
+            <label for="cfgDebugMode">Debug Mode (Enable verbose logging & extra stats)</label>
+            <label class="toggle">
+              <input type="checkbox" id="cfgDebugMode">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="toggle-row" style="margin-top: 15px;">
+            <label for="cfgEndianSwap">Force Endian Swap (Big to Little Endian)</label>
+            <label class="toggle">
+              <input type="checkbox" id="cfgEndianSwap" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. Transcription -->
+      <div class="card config-card">
+        <div class="card-header">
+          <div class="section-title">📝 Transcription Options</div>
         </div>
         <div class="card-body">
           <div class="form-group">
@@ -366,51 +438,49 @@
         </div>
       </div>
 
-      <!-- 6. Advanced AI Settings -->
+      <!-- 7. External Delivery -->
       <div class="card config-card">
         <div class="card-header">
-          <div class="section-title">🤖 Advanced System Settings</div>
+          <div class="section-title">🌐 External Delivery</div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgDeliveryEnabled" onchange="toggleDeliverySection(this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
         </div>
         <div class="card-body">
-          <div class="form-row" style="margin-bottom: 15px;">
+          <div id="deliverySection" style="display:none;">
             <div class="form-group">
-              <label>AI Engine</label>
-              <select id="cfgWhisperEngine">
-                <option value="faster">Faster-Whisper (High Performance)</option>
-                <option value="openai">OpenAI Whisper (Standard)</option>
-              </select>
+              <label>Endpoint URL</label>
+              <input id="cfgDeliveryUrl" type="url" placeholder="http://your-server/api/receive-audio">
+              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Webhook destination URL.</div>
             </div>
-            <div class="form-group">
-              <label>AI Model Size</label>
-              <select id="cfgWhisperModel">
-                <option value="tiny">Tiny (Fastest, low accuracy)</option>
-                <option value="base">Base (Very Fast, low accuracy)</option>
-                <option value="small">Small (Fast, ~2GB VRAM)</option>
-                <option value="medium">Medium (Balanced, ~5GB VRAM)</option>
-                <option value="large-v3">Large-v3 (High Quality, ~10GB VRAM)</option>
-                <option value="turbo">Turbo (High Quality, fast, ~6GB VRAM)</option>
-              </select>
+            <div class="form-group" style="margin-top: 15px;">
+              <label>Extra Fields (JSON) — use {uuid}</label>
+              <textarea id="cfgDeliveryExtra"
+                style="width:100%;height:80px;border-radius:8px;border:1px solid var(--border);padding:8px;font-family:monospace;font-size:0.72rem;">{"session_id": "{uuid}"}</textarea>
+              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Custom JSON payload fields.</div>
+            </div>
+            <div class="form-row" style="margin-top: 15px;">
+              <div class="form-group">
+                <label>HTTP Method</label>
+                <select id="cfgDeliveryMethod">
+                  <option value="POST">POST</option>
+                  <option value="PUT">PUT</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Timeout (seconds)</label>
+                <input id="cfgDeliveryTimeout" type="number" value="30">
+              </div>
+            </div>
+            <div class="form-group" style="margin-top: 15px;">
+              <label>Field Name (Multipart Form-Data)</label>
+              <input id="cfgDeliveryField" type="text" value="session_zip">
+              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Key for the ZIP file in form-data.</div>
             </div>
           </div>
-          <div class="form-group">
-            <label>AI Music Detection (0.0 - 1.0)</label>
-            <input id="cfgAiNoSpeech" type="number" step="0.1" min="0" max="1" value="0.6">
-            <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Used for [MUSIC] tag generation.</div>
-          </div>
-          <div class="form-group" style="margin-top: 15px;">
-            <label>Min Silence for [MUSIC] (sec)</label>
-            <input id="cfgAiMinGap" type="number" step="0.5" min="0" value="3.0">
-          </div>
-          <div class="form-group" style="margin-top: 15px;">
-            <label>Silence Frame Duration (ms)</label>
-            <input id="cfgSilenceFrameMs" type="number" step="10" min="10" max="1000" value="20">
-          </div>
-          <div class="toggle-row" style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 15px;">
-            <label for="cfgAutoRestart">Auto-Restart AI Worker (Watchdog)</label>
-            <label class="toggle">
-              <input type="checkbox" id="cfgAutoRestart" checked>
-              <span class="toggle-slider"></span>
-            </label>
+          <div id="deliveryPlaceholder" style="text-align: center; color: var(--muted); padding: 40px 0;">
+             Webhook delivery is currently disabled.
           </div>
         </div>
       </div>

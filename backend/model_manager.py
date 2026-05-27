@@ -30,6 +30,27 @@ import json
 import requests
 
 # ---------------------------------------------------------------------------
+# Console Colors
+# ---------------------------------------------------------------------------
+class Colors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+def log_info(msg): print(f"{Colors.OKBLUE}[INFO]{Colors.ENDC} {msg}")
+def log_success(msg): print(f"{Colors.OKGREEN}[SUCCESS]{Colors.ENDC} {msg}")
+def log_warn(msg): print(f"{Colors.WARNING}[WARN]{Colors.ENDC} {msg}")
+def log_err(msg): print(f"{Colors.FAIL}[ERROR]{Colors.ENDC} {msg}")
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# ---------------------------------------------------------------------------
 # Module-level state
 # ---------------------------------------------------------------------------
 
@@ -77,7 +98,7 @@ def check_and_restart_worker() -> None:
     if provider != "local":
         # If API provider is selected, release local resources
         if _process is not None and _process.is_alive():
-            print(f"[ModelManager] Provider is '{provider}'. Stopping local model worker...")
+            log_info(f"Provider is '{provider}'. Stopping local model worker...")
             stop()
         return
 
@@ -85,8 +106,8 @@ def check_and_restart_worker() -> None:
         return
 
     if not _process.is_alive():
-        if auto_restart:
-            print("[ModelManager] Whisper worker process died. Auto-restarting...")
+        if auto_restart and model_status != "error":
+            log_warn("Whisper worker process died. Auto-restarting...")
             stop()
             start(_model_name, _engine)
 
@@ -116,20 +137,33 @@ def start(model_name: str = "medium", engine: str = "openai") -> None:
     model_status = "loading"
     current_task = f"Loading {model_name} ({engine})..."
 
-    model_dir = os.path.join(os.getcwd(), "models", "whisper")
+    model_dir = os.path.join(BASE_DIR, "models", "whisper")
     os.makedirs(model_dir, exist_ok=True)
+
+    # Load device and compute_type configurations from settings JSON
+    device_config = "auto"
+    compute_type_config = "default"
+    config_path = os.path.join(BASE_DIR, "audiosocket.json")
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+                device_config = cfg.get("local_whisper_device", "auto")
+                compute_type_config = cfg.get("local_whisper_compute_type", "default")
+        except Exception:
+            pass
 
     _request_queue = multiprocessing.Queue()
     _response_queue = multiprocessing.Queue()
 
     _process = multiprocessing.Process(
         target=_worker_main,
-        args=(_request_queue, _response_queue, model_name, model_dir, engine),
+        args=(_request_queue, _response_queue, model_name, model_dir, engine, device_config, compute_type_config),
         daemon=True,
         name="WhisperModelWorker",
     )
     _process.start()
-    print(f"[ModelManager] Worker process started (PID {_process.pid}, engine={engine})")
+    print(f"[ModelManager] Worker process started (PID {_process.pid}, engine={engine}, device={device_config}, compute_type={compute_type_config})")
 
     # Background thread routes responses back to callers
     _listener_thread = threading.Thread(
@@ -364,6 +398,8 @@ def _worker_main(
     model_name: str,
     model_dir: str,
     engine: str = "openai",
+    device_config: str = "auto",
+    compute_type_config: str = "default",
 ) -> None:
     """Entry point for the model worker process."""
     # Fix encoding on Windows
@@ -375,14 +411,27 @@ def _worker_main(
     try:
         import torch
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"[ModelWorker] Engine: {engine.upper()}, Device: {device.upper()}")
+        # Device selection
+        if device_config == "cuda":
+            device = "cuda"
+        elif device_config == "cpu":
+            device = "cpu"
+        else:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        # Compute type selection
+        if compute_type_config == "default":
+            compute_type = "float16" if device == "cuda" else "int8"
+        else:
+            compute_type = compute_type_config
+
+        print(f"[ModelWorker] Engine: {engine.upper()}, Device: {device.upper()}, Compute Type: {compute_type.upper()}")
 
         resp_q.put(
             {
                 "type": "status",
                 "status": "loading",
-                "task": f"Loading {model_name} ({engine})...",
+                "task": f"Loading {model_name} ({engine}, {device}, {compute_type})...",
             }
         )
 
@@ -390,8 +439,6 @@ def _worker_main(
         if engine == "faster":
             from faster_whisper import WhisperModel
 
-            # Faster-whisper uses compute_type for quantization
-            compute_type = "float16" if device == "cuda" else "int8"
             print(f"[ModelWorker] Loading faster-whisper '{model_name}' ({compute_type}) ...")
             model = WhisperModel(
                 model_name,
@@ -399,10 +446,22 @@ def _worker_main(
                 compute_type=compute_type,
                 download_root=model_dir,
             )
+        elif engine == "nvidia":
+            # NVIDIA NeMo Models
+            print(f"[ModelWorker] Checking for local NVIDIA NeMo model '{model_name}'...")
+            nv_path = os.path.join(BASE_DIR, "models", "nvidia", f"{model_name}.nemo")
+            if not os.path.exists(nv_path):
+                raise RuntimeError(f"NVIDIA model file not found locally: {nv_path}")
+            
+            # NOTE: NeMo toolkit is NOT installed by default (it is very large).
+            # We would need 'import nemo.collections.asr as nemo_asr' here.
+            # For now, we will show a descriptive error if trying to RUN locally.
+            print(f"[ModelWorker] Found {model_name}.nemo, but local NeMo engine is not yet implemented.")
+            raise RuntimeError("Local NVIDIA NeMo execution is currently not implemented in this build. Please use NVIDIA API Provider for these models.")
         else:
             import whisper
 
-            print(f"[ModelWorker] Loading openai-whisper '{model_name}' ...")
+            print(f"[ModelWorker] Loading openai-whisper '{model_name}' on {device}...")
             model = whisper.load_model(
                 model_name, device=device, download_root=model_dir
             )

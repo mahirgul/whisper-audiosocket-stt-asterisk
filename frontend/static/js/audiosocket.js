@@ -112,6 +112,22 @@ function handleSSEEvent(eventType, data) {
       }
       break;
 
+    case "live_transcription":
+      if (activeConnections[data.uuid]) {
+        if (!activeConnections[data.uuid].liveText) {
+          activeConnections[data.uuid].liveText = [];
+        }
+        // Append new text
+        activeConnections[data.uuid].liveText.push(data.text);
+        // Keep only last 5 entries to avoid overflow
+        if (activeConnections[data.uuid].liveText.length > 5) {
+          activeConnections[data.uuid].liveText.shift();
+        }
+        activeConnections[data.uuid].stage = "📡 Streaming live text...";
+        renderActiveConnections();
+      }
+      break;
+
     case "session_processed":
       delete activeConnections[data.uuid];
       renderActiveConnections();
@@ -196,14 +212,24 @@ function renderActiveConnections() {
     return;
   }
 
-  el.innerHTML = list.map(conn => `
-    <div class="conn-card">
-      <div class="conn-uuid">${conn.uuid}</div>
-      <div class="conn-stage">${conn.stage}</div>
-      <div class="conn-chunks">Chunks processed: <strong>${conn.chunks}</strong></div>
-      ${conn.remote ? `<div class="conn-chunks" style="margin-top:3px;">Remote: ${conn.remote}</div>` : ""}
-    </div>
-  `).join("");
+  el.innerHTML = list.map(conn => {
+    const liveTextHtml = (conn.liveText && conn.liveText.length > 0) ? `
+      <div style="margin-top:10px; padding:10px; background:var(--bg); border-radius:8px; font-size:0.7rem; color:var(--primary); line-height:1.4; border-left:3px solid var(--primary);">
+        <strong style="font-size:0.6rem; color:var(--muted); display:block; margin-bottom:4px;">LIVE TRANSCRIPTION</strong>
+        ${conn.liveText.join(" ")}
+      </div>
+    ` : "";
+
+    return `
+      <div class="conn-card">
+        <div class="conn-uuid">${conn.uuid}</div>
+        <div class="conn-stage">${conn.stage}</div>
+        <div class="conn-chunks">Chunks processed: <strong>${conn.chunks}</strong></div>
+        ${conn.remote ? `<div class="conn-chunks" style="margin-top:3px;">Remote: ${conn.remote}</div>` : ""}
+        ${liveTextHtml}
+      </div>
+    `;
+  }).join("");
 }
 
 // ---------------------------------------------------------------------------

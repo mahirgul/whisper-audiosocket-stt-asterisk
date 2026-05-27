@@ -4,7 +4,7 @@ cd /d %~dp0
 
 echo.
 echo ============================================================
-echo   Stereo Dubbing Pro - V2  ^|  Setup / Installation
+echo   WASA - Whisper AudioSocket Asterisk  ^|  Setup
 echo ============================================================
 echo.
 

@@ -10,11 +10,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css?v=2">
     <script src="/static/js/wavesurfer.min.js"></script>
+    <script src="/static/js/header.js" defer></script>
     <script src="/static/js/script.js?v=2" defer></script>
 </head>
 <body>
 
-    <div id="modelOverlay" style="display:none;"><div class="spinner"></div><p style="margin-top:20px; font-size:0.85rem; color:#64748b; font-weight:700;">Waking up the AI...</p></div>
+    <div id="toast" class="toast"></div>
 
     <!-- Shared topbar navigation -->
     <nav class="topbar">
@@ -30,6 +31,10 @@
             <a href="/" class="active"><span class="nav-icon">🎛</span> Studio</a>
             <a href="/audiosocket.html"><span class="nav-icon">📡</span> AudioSocket</a>
             <a href="/config.html"><span class="nav-icon">⚙️</span> Config</a>
+        </div>
+        <div class="topbar-right">
+            <div id="aiStatusDot" style="width:10px; height:10px; border-radius:50%; background:#94a3b8;"></div>
+            <span id="aiStatusText" style="font-size:0.7rem; font-weight:800; color:var(--muted); text-transform:uppercase;">AI Offline</span>
         </div>
     </nav>
 
@@ -78,6 +83,17 @@
 
                 <!-- Active Task List -->
                 <div id="taskList" class="task-list"></div>
+
+                <!-- System Logs -->
+                <div style="margin-top:20px; border-top:1px solid var(--border); padding-top:15px;">
+                    <div style="font-size:0.65rem; font-weight:900; color:var(--muted); text-transform:uppercase; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                        <span>System Logs</span>
+                        <button class="btn btn-sm" style="font-size:0.55rem; padding:2px 6px; height:auto;" onclick="document.getElementById('systemLogList').innerHTML=''">Clear</button>
+                    </div>
+                    <div id="systemLogList" style="max-height:150px; overflow-y:auto; font-family:monospace; font-size:0.65rem; color:var(--muted); background:var(--bg); border-radius:8px; padding:10px; line-height:1.4;">
+                        No system logs yet.
+                    </div>
+                </div>
 
                 <!-- Player -->
                 <div id="playerCard" class="player-card">

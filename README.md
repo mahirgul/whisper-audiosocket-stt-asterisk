@@ -66,8 +66,8 @@ You can manage all settings via the **Config** tab in the Web UI. Key settings i
 2. Run `./install.sh` to setup the environment.
 3. Run `./run.sh` to launch the application.
 
-4. Select your desired Whisper model when prompted.
-5. Access the dashboard at `http://localhost:8000`.
+4. Access the dashboard at `http://localhost:8000`.
+5. Configure your Whisper model and engine in the **Config** tab.
 
 ---
 

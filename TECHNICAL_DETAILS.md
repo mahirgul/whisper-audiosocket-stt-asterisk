@@ -33,13 +33,11 @@ These settings are read at the start of every transcription job. You can change 
 *   **External Delivery:** Update your Webhook URLs or metadata fields on the fly.
 
 ### Automatic Hot-Reload (Handled by System)
-When you save these settings, the AudioSocket TCP server will automatically restart its listener (taking ~1 second):
-*   **Listen Port:** Changes the TCP port (e.g., from 9092 to 9093).
+When you save these settings, the system will automatically apply the changes:
+*   **AudioSocket Server:** Restarts the TCP listener (taking ~1 second) if Port or Bind Address changed.
+*   **Whisper Model Size & Engine:** If you switch from `Medium` to `Large` or change the Engine, the system will automatically stop the current AI worker and start a new one with the selected model. This happens seamlessly in the background.
 *   **Audio Format:** Changes to Sample Rate or bit depth.
 *   **VAD Settings:** RMS/Silence thresholds.
-
-### Manual Restart Required
-*   **Whisper Model Size:** To switch from `Medium` to `Large` or `Turbo`, you must restart the entire application via `run.bat`. This is because the model is loaded into hardware memory at startup.
 
 ---
 

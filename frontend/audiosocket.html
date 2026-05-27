@@ -12,6 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/style.css?v=2">
   <link rel="stylesheet" href="/static/css/audiosocket.css?v=2">
+  <script src="/static/js/header.js" defer></script>
   <script src="/static/js/audiosocket.js?v=2" defer></script>
 </head>
 
@@ -33,9 +34,13 @@
       <a href="/config.html"><span class="nav-icon">⚙️</span> Config</a>
     </div>
     <div class="topbar-right">
-      <span id="serverStatus" class="status-badge stopped">
+      <span id="serverStatus" class="status-badge stopped" style="margin: 0;">
         <span class="dot"></span> Checking…
       </span>
+      <div style="display:flex; align-items:center; gap:10px; margin-left: 10px;">
+        <div id="aiStatusDot" style="width:10px; height:10px; border-radius:50%; background:#94a3b8;"></div>
+        <span id="aiStatusText" style="font-size:0.7rem; font-weight:800; color:var(--muted); text-transform:uppercase;">AI Offline</span>
+      </div>
     </div>
   </nav>
 

@@ -26,6 +26,7 @@ import traceback
 import uuid as _uuid
 from datetime import datetime, timezone
 import wave
+import tempfile
 
 try:
     import audioop
@@ -42,6 +43,25 @@ except ImportError:
 import audiosocket_processor
 import model_manager
 import utils
+
+# ---------------------------------------------------------------------------
+# Console Colors
+# ---------------------------------------------------------------------------
+class Colors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+def log_info(msg): print(f"{Colors.OKBLUE}[INFO]{Colors.ENDC} {msg}")
+def log_success(msg): print(f"{Colors.OKGREEN}[SUCCESS]{Colors.ENDC} {msg}")
+def log_warn(msg): print(f"{Colors.WARNING}[WARN]{Colors.ENDC} {msg}")
+def log_err(msg): print(f"{Colors.FAIL}[ERROR]{Colors.ENDC} {msg}")
 
 # ---------------------------------------------------------------------------
 # Global state — thread-safe
@@ -141,6 +161,10 @@ def load_config(config_path: str) -> dict:
         "max_concurrent_connections": 10,
         "bind_address": "127.0.0.1",
         "auto_restart_worker": True,
+        "local_whisper_device": "auto",
+        "local_whisper_compute_type": "default",
+        "web_host": "0.0.0.0",
+        "web_port": 8000,
         "whisper": {
             "task": "transcribe",
             "temperature": 0.0,
@@ -222,7 +246,7 @@ def start_server(config_path: str) -> None:
         target=_run, daemon=True, name="AudioSocket-Thread"
     )
     _thread.start()
-    print(f"[AudioSocket] Server thread started — listening on {bind_addr}:{port}")
+    log_info(f"AudioSocket server thread started — listening on {bind_addr}:{port}")
 
 
 def stop_server() -> None:
@@ -442,12 +466,18 @@ async def _connection_handler(
             debug_enabled = cfg.get("debug_mode", False)
             rms_threshold = cfg.get("vad_rms_threshold", 300)
             ignore_silence = cfg.get("ignore_silence_timeout", False)
+            trans_mode = cfg.get("transcription_mode", "on_close")
             if ignore_silence:
                 silence_timeout_s = None
             else:
                 silence_timeout_s = (
                     cfg.get("vad_silence_threshold_ms", 5000) / 1000.0
                 )
+
+        # Online Transcription State
+        online_buf = bytearray()
+        last_online_ts = time.time()
+        online_chunk_size = sample_rate * channels * sample_width * 5 # 5 seconds
 
         # Build a silence frame to send back to Asterisk (Optional)
         send_silence_enabled = cfg.get("send_silence_frames", False)
@@ -539,6 +569,13 @@ async def _connection_handler(
                             stats["vad_stats"]["active_frames"] += 1
 
                         audio_buf.extend(payload)
+
+                        # Online Mode: Accumulate and process chunks
+                        if trans_mode == "online":
+                            online_buf.extend(payload)
+                            if len(online_buf) >= online_chunk_size:
+                                _trigger_online_transcription(session_id, bytes(online_buf), out_dir)
+                                online_buf.clear()
                     else:
                         stats["other_frames"] += 1
                         if debug_enabled:
@@ -579,6 +616,11 @@ async def _connection_handler(
                 await silence_task
             except asyncio.CancelledError:
                 pass
+
+        # Final Online Chunk (if any)
+        if trans_mode == "online" and len(online_buf) > 0:
+            _trigger_online_transcription(session_id, bytes(online_buf), out_dir)
+            online_buf.clear()
 
         # Connection ended
         duration_s = (datetime.now(timezone.utc) - start_time).total_seconds()
@@ -988,3 +1030,43 @@ def _save_session_meta_sync(
 
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(existing, f, ensure_ascii=False, indent=2)
+
+
+def _trigger_online_transcription(session_id: str, pcm_chunk: bytes, out_dir: str) -> None:
+    """
+    Saves a small chunk of audio and triggers a non-blocking transcription.
+    Used for 'online' mode.
+    """
+    def _task():
+        try:
+            with _config_lock:
+                cfg = dict(_config)
+                sample_rate = cfg.get("input_sample_rate", 8000)
+                channels = cfg.get("input_channels", 1)
+                sample_width = cfg.get("input_sample_width", 2)
+                whisper_opts = cfg.get("whisper", {})
+
+            # Use a unique temp file for this chunk
+            fd, tmp_path = tempfile.mkstemp(suffix=".wav")
+            os.close(fd)
+            try:
+                audiosocket_processor.save_wav(tmp_path, pcm_chunk, sample_rate, channels, sample_width)
+                
+                # Transcribe (blocking here is fine as we are in a dedicated Thread)
+                result = model_manager.transcribe(tmp_path, options=whisper_opts)
+                text = result.get("text", "").strip()
+                
+                if text:
+                    _emit_sync("live_transcription", {
+                        "uuid": session_id,
+                        "text": text,
+                        "ts": time.time()
+                    })
+            finally:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+        except Exception:
+            traceback.print_exc()
+
+    # Run in a background thread so we don't block the AudioSocket reader loop
+    threading.Thread(target=_task, daemon=True).start()

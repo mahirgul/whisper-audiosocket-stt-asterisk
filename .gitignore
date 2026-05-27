@@ -60,6 +60,7 @@ CLAUDE.md
 .coverage
 htmlcov/
 .tox/
+.deep/
 
 # ── MyPy ──────────────────────────────────────────────────────
 .mypy_cache/

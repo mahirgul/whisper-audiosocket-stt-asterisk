@@ -27,6 +27,7 @@ import uuid
 import time
 import traceback
 import json
+import requests
 
 # ---------------------------------------------------------------------------
 # Module-level state
@@ -60,20 +61,30 @@ _engine: str = "openai"
 
 def check_and_restart_worker() -> None:
     global _process, _model_name, _engine
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cfg_path = os.path.join(base, "audiosocket.json")
+    auto_restart = True
+    provider = "local"
+    if os.path.exists(cfg_path):
+        try:
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+                auto_restart = cfg.get("auto_restart_worker", True)
+                provider = cfg.get("api_provider", "local")
+        except Exception:
+            pass
+
+    if provider != "local":
+        # If API provider is selected, release local resources
+        if _process is not None and _process.is_alive():
+            print(f"[ModelManager] Provider is '{provider}'. Stopping local model worker...")
+            stop()
+        return
+
     if _process is None:
         return
+
     if not _process.is_alive():
-        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        cfg_path = os.path.join(base, "audiosocket.json")
-        auto_restart = True
-        if os.path.exists(cfg_path):
-            try:
-                with open(cfg_path, "r", encoding="utf-8") as f:
-                    cfg = json.load(f)
-                    auto_restart = cfg.get("auto_restart_worker", True)
-            except Exception:
-                pass
-        
         if auto_restart:
             print("[ModelManager] Whisper worker process died. Auto-restarting...")
             stop()
@@ -175,6 +186,44 @@ def stop() -> None:
     _response_queue = None
 
 
+def transcribe_api(
+    audio_path: str, base_url: str, api_key: str, model_name: str, options: dict
+) -> dict:
+    """Send audio file to an OpenAI-compatible Speech-to-Text API endpoint."""
+    url = f"{base_url.rstrip('/')}/audio/transcriptions"
+    
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+        
+    data = {
+        "model": model_name,
+        "response_format": "verbose_json"
+    }
+    
+    if "temperature" in options:
+        data["temperature"] = str(options["temperature"])
+    if "initial_prompt" in options and options["initial_prompt"]:
+        data["prompt"] = options["initial_prompt"]
+    if "task" in options:
+        # Route to translation if task is set to translate
+        if options["task"] == "translate":
+            url = f"{base_url.rstrip('/')}/audio/translations"
+    if "language" in options and options["language"]:
+        data["language"] = options["language"]
+
+    with open(audio_path, "rb") as f:
+        files = {
+            "file": (os.path.basename(audio_path), f, "audio/wav")
+        }
+        resp = requests.post(url, headers=headers, data=data, files=files, timeout=120)
+        
+    if resp.status_code != 200:
+        raise RuntimeError(f"API Error ({resp.status_code}): {resp.text}")
+        
+    return resp.json()
+
+
 def transcribe(
     audio_path: str, *, timeout: float = 300.0, options: dict | None = None, label: str = "Task"
 ) -> dict:
@@ -182,6 +231,46 @@ def transcribe(
     Thread-safe transcription request.
     """
     global model_status, current_task
+
+    # Load provider configuration
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cfg_path = os.path.join(base, "audiosocket.json")
+    provider = "local"
+    api_url = ""
+    api_key = ""
+    api_model = ""
+    if os.path.exists(cfg_path):
+        try:
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+                provider = cfg.get("api_provider", "local")
+                api_url = cfg.get("api_base_url", "")
+                api_key = cfg.get("api_key", "")
+                api_model = cfg.get("api_model_name", "")
+        except Exception:
+            pass
+
+    if provider != "local":
+        # Route to External API
+        with _pending_lock:
+            # Immediate status update for pollers
+            model_status = "processing"
+            current_task = f"Cloud AI: Transcribing {label}..."
+        try:
+            res = transcribe_api(audio_path, api_url, api_key, api_model, options or {})
+            return {
+                "type": "result",
+                "segments": res.get("segments", []),
+                "text": res.get("text", ""),
+                "language": res.get("language", ""),
+            }
+        except Exception as e:
+            traceback.print_exc()
+            raise e
+        finally:
+            with _pending_lock:
+                model_status = "idle"
+                current_task = "Ready"
 
     if _request_queue is None or _process is None or not _process.is_alive():
         raise RuntimeError("Model worker is not running.")

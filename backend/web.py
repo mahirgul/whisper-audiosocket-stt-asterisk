@@ -50,6 +50,7 @@ async def lifespan(app: FastAPI):
     # Load default model/engine from config
     model_name = args.model
     engine_name = args.engine
+    provider = "local"
     config_path = os.path.join(BASE_DIR, "audiosocket.json")
     if os.path.exists(config_path):
         try:
@@ -57,11 +58,13 @@ async def lifespan(app: FastAPI):
                 cfg = json.load(f)
                 model_name = cfg.get("whisper_model", model_name)
                 engine_name = cfg.get("whisper_engine", engine_name)
+                provider = cfg.get("api_provider", "local")
         except Exception:
             pass
 
-    # Start the shared Whisper model worker process
-    model_manager.start(model_name, engine_name)
+    # Start the shared Whisper model worker process ONLY if provider is local
+    if provider == "local":
+        model_manager.start(model_name, engine_name)
     # Tell the AudioSocket server where the project root is
     as_srv.set_base_dir(BASE_DIR)
     as_srv.start_server(config_path)
@@ -348,13 +351,20 @@ async def as_save_config(config: dict):
         json.dump(config, f, ensure_ascii=False, indent=2)
     as_srv.start_server(AUDIOSOCKET_CONFIG)
 
-    # Check if model or engine changed, and hot-swap
+    # Check provider and hot-swap local worker process
+    new_provider = config.get("api_provider", "local")
     new_model = config.get("whisper_model", "medium")
     new_engine = config.get("whisper_engine", "faster")
-    if model_manager._model_name != new_model or model_manager._engine != new_engine:
-        print(f"[Web] Configuration changed AI model to '{new_model}' or engine to '{new_engine}'. Hot-swapping...")
-        model_manager.stop()
-        model_manager.start(new_model, new_engine)
+    
+    if new_provider == "local":
+        if model_manager._process is None or not model_manager._process.is_alive() or model_manager._model_name != new_model or model_manager._engine != new_engine:
+            print(f"[Web] Starting/Restarting local Whisper worker with '{new_model}' ({new_engine})...")
+            model_manager.stop()
+            model_manager.start(new_model, new_engine)
+    else:
+        if model_manager._process is not None and model_manager._process.is_alive():
+            print(f"[Web] Cloud API '{new_provider}' selected. Stopping local model worker...")
+            model_manager.stop()
 
     return {"status": "saved", "config": config}
 

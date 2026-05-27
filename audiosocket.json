@@ -19,6 +19,10 @@
   "auto_restart_worker": true,
   "whisper_model": "medium",
   "whisper_engine": "faster",
+  "api_provider": "local",
+  "api_base_url": "https://integrate.api.nvidia.com/v1",
+  "api_key": "",
+  "api_model_name": "nvidia/whisper-large-v3",
   "whisper": {
     "temperature": 0,
     "no_speech_threshold": 0.6,

@@ -38,6 +38,11 @@ function applyConfigToForm(cfg) {
   setChecked("cfgAutoRestart", cfg.auto_restart_worker ?? true);
   setVal("cfgWhisperModel", cfg.whisper_model || "medium");
   setVal("cfgWhisperEngine", cfg.whisper_engine || "faster");
+  setVal("cfgApiProvider",  cfg.api_provider || "local");
+  setVal("cfgApiBaseUrl",   cfg.api_base_url || "");
+  setVal("cfgApiKey",       cfg.api_key || "");
+  setVal("cfgApiModelName", cfg.api_model_name || "");
+  toggleApiFields(cfg.api_provider || "local");
 
   // Advanced AI
   setVal("cfgAiNoSpeech",   cfg.ai_no_speech_threshold ?? 0.6);
@@ -94,6 +99,10 @@ function gatherConfig() {
     auto_restart_worker:      getChecked("cfgAutoRestart"),
     whisper_model:            getVal("cfgWhisperModel") || "medium",
     whisper_engine:           getVal("cfgWhisperEngine") || "faster",
+    api_provider:             getVal("cfgApiProvider") || "local",
+    api_base_url:             getVal("cfgApiBaseUrl") || "",
+    api_key:                  getVal("cfgApiKey") || "",
+    api_model_name:           getVal("cfgApiModelName") || "",
     
     // Advanced AI
     ai_no_speech_threshold:   parseFloat(getVal("cfgAiNoSpeech")) || 0.6,
@@ -146,6 +155,34 @@ function toggleDeliverySection(enabled) {
   const placeholder = document.getElementById("deliveryPlaceholder");
   if (sec) sec.style.display = enabled ? "block" : "none";
   if (placeholder) placeholder.style.display = enabled ? "none" : "block";
+}
+
+window.toggleApiFields = function(provider) {
+  const fieldsGroup = document.getElementById("apiFieldsGroup");
+  const customFields = document.getElementById("apiCustomFields");
+  if (!fieldsGroup || !customFields) return;
+  
+  if (provider === "local") {
+    fieldsGroup.style.display = "none";
+    customFields.style.display = "none";
+  } else {
+    fieldsGroup.style.display = "block";
+    if (provider === "nvidia") {
+      setVal("cfgApiBaseUrl", "https://integrate.api.nvidia.com/v1");
+      setVal("cfgApiModelName", "nvidia/whisper-large-v3");
+      customFields.style.display = "none";
+    } else if (provider === "openai") {
+      setVal("cfgApiBaseUrl", "https://api.openai.com/v1");
+      setVal("cfgApiModelName", "whisper-1");
+      customFields.style.display = "none";
+    } else if (provider === "groq") {
+      setVal("cfgApiBaseUrl", "https://api.groq.com/openapi/v1");
+      setVal("cfgApiModelName", "whisper-large-v3");
+      customFields.style.display = "none";
+    } else if (provider === "custom") {
+      customFields.style.display = "block";
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

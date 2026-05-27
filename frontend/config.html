@@ -82,6 +82,47 @@
 
     <div class="config-grid">
       
+      <!-- 0. AI Provider (API / Local) -->
+      <div class="card config-card">
+        <div class="card-header">
+          <div class="section-title">🤖 AI Transcription Provider</div>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label>Transcription Provider</label>
+            <select id="cfgApiProvider" onchange="toggleApiFields(this.value)">
+              <option value="local">Local (Run Whisper on this machine)</option>
+              <option value="nvidia">NVIDIA API Catalog (integrate.api.nvidia.com)</option>
+              <option value="openai">OpenAI API (api.openai.com)</option>
+              <option value="groq">Groq API (api.groq.com)</option>
+              <option value="custom">Custom OpenAI-Compatible API</option>
+            </select>
+            <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Choose whether to run speech-to-text locally or use a cloud provider.</div>
+          </div>
+          
+          <div id="apiFieldsGroup" style="display:none; margin-top:15px; border-top:1px solid var(--border); padding-top:15px;">
+            <div class="form-group">
+              <label>API Key / Token</label>
+              <input id="cfgApiKey" type="password" placeholder="Enter API Key / Token">
+              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">NVIDIA (nvapi-...), OpenAI (sk-...), Groq (gsk-...)</div>
+            </div>
+            
+            <div id="apiCustomFields" style="display:none; margin-top:15px;">
+              <div class="form-group">
+                <label>API Base URL</label>
+                <input id="cfgApiBaseUrl" type="text" placeholder="https://api.openai.com/v1">
+                <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">OpenAI compatible API base endpoint URL.</div>
+              </div>
+              <div class="form-group" style="margin-top: 15px;">
+                <label>API Model Name</label>
+                <input id="cfgApiModelName" type="text" placeholder="whisper-1">
+                <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">API model identifier.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 1. AudioSocket Server -->
       <div class="card config-card">
         <div class="card-header">

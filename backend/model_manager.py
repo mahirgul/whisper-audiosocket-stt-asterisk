@@ -26,6 +26,7 @@ import sys
 import uuid
 import time
 import traceback
+import json
 
 # ---------------------------------------------------------------------------
 # Module-level state
@@ -41,12 +42,51 @@ _pending_lock = threading.Lock()
 
 _listener_thread: threading.Thread | None = None
 
+_watchdog_thread: threading.Thread | None = None
+_watchdog_stop_event = threading.Event()
+
 # Observable status (read by web.py stats loop)
 model_status: str = "loading"
 current_task: str = "Waking up AI..."
 
 _model_name: str = "medium"
 _engine: str = "openai"
+
+
+# ---------------------------------------------------------------------------
+# Watchdog loop and check helper
+# ---------------------------------------------------------------------------
+
+
+def check_and_restart_worker() -> None:
+    global _process, _model_name, _engine
+    if _process is None:
+        return
+    if not _process.is_alive():
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        cfg_path = os.path.join(base, "audiosocket.json")
+        auto_restart = True
+        if os.path.exists(cfg_path):
+            try:
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    auto_restart = cfg.get("auto_restart_worker", True)
+            except Exception:
+                pass
+        
+        if auto_restart:
+            print("[ModelManager] Whisper worker process died. Auto-restarting...")
+            stop()
+            start(_model_name, _engine)
+
+
+def _watchdog_loop() -> None:
+    while not _watchdog_stop_event.is_set():
+        try:
+            check_and_restart_worker()
+        except Exception as e:
+            print(f"[ModelManager-Watchdog] Error in watchdog: {e}")
+        _watchdog_stop_event.wait(timeout=5.0)
 
 
 # ---------------------------------------------------------------------------
@@ -58,6 +98,7 @@ def start(model_name: str = "medium", engine: str = "openai") -> None:
     """Start the model worker process (call once at app startup)."""
     global _process, _request_queue, _response_queue, _listener_thread
     global model_status, current_task, _model_name, _engine
+    global _watchdog_thread
 
     _model_name = model_name
     _engine = engine
@@ -87,10 +128,27 @@ def start(model_name: str = "medium", engine: str = "openai") -> None:
     )
     _listener_thread.start()
 
+    # Start the watchdog thread if not already running
+    if _watchdog_thread is None or not _watchdog_thread.is_alive():
+        _watchdog_stop_event.clear()
+        _watchdog_thread = threading.Thread(
+            target=_watchdog_loop,
+            daemon=True,
+            name="ModelManager-Watchdog",
+        )
+        _watchdog_thread.start()
+
 
 def stop() -> None:
     """Graceful shutdown."""
     global _process, _request_queue, _response_queue, _listener_thread
+    global _watchdog_thread, _watchdog_stop_event
+
+    if _watchdog_thread is not None and threading.current_thread() != _watchdog_thread:
+        _watchdog_stop_event.set()
+        _watchdog_thread.join(timeout=2)
+        _watchdog_thread = None
+
     if _request_queue is not None:
         try:
             _request_queue.put(None)  # poison pill for worker process

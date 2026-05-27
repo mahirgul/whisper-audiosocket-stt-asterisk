@@ -31,6 +31,14 @@ function applyConfigToForm(cfg) {
   setChecked("cfgIgnoreSilence", cfg.ignore_silence_timeout || false);
   setChecked("cfgSilenceFrames", cfg.send_silence_frames || false);
 
+  // New configurations
+  setVal("cfgBindAddress",  cfg.bind_address || "127.0.0.1");
+  setVal("cfgMaxConnections", cfg.max_concurrent_connections || 10);
+  setChecked("cfgEndianSwap", cfg.force_endian_swap ?? true);
+  setChecked("cfgAutoRestart", cfg.auto_restart_worker ?? true);
+  setVal("cfgWhisperModel", cfg.whisper_model || "medium");
+  setVal("cfgWhisperEngine", cfg.whisper_engine || "faster");
+
   // Advanced AI
   setVal("cfgAiNoSpeech",   cfg.ai_no_speech_threshold ?? 0.6);
   setVal("cfgAiMinGap",     cfg.ai_min_music_gap ?? 3.0);
@@ -45,6 +53,10 @@ function applyConfigToForm(cfg) {
   setVal("cfgWhisperComp",      w.compression_ratio_threshold ?? 2.4);
   setVal("cfgWhisperPrompt",    w.initial_prompt ?? "");
   setChecked("cfgWhisperCondition", w.condition_on_previous_text ?? true);
+  setVal("cfgWhisperBeamSize",  w.beam_size ?? 5);
+  setVal("cfgWhisperBestOf",    w.best_of ?? 5);
+  setChecked("cfgWhisperVadFilter", w.vad_filter ?? true);
+  setVal("cfgWhisperLang",      w.language ?? "");
 
   const d = cfg.delivery || {};
   setChecked("cfgDeliveryEnabled", d.enabled);
@@ -75,6 +87,14 @@ function gatherConfig() {
     ignore_silence_timeout:   getChecked("cfgIgnoreSilence"),
     send_silence_frames:      getChecked("cfgSilenceFrames"),
     
+    // New configurations
+    bind_address:             getVal("cfgBindAddress") || "127.0.0.1",
+    max_concurrent_connections: parseInt(getVal("cfgMaxConnections")) || 10,
+    force_endian_swap:        getChecked("cfgEndianSwap"),
+    auto_restart_worker:      getChecked("cfgAutoRestart"),
+    whisper_model:            getVal("cfgWhisperModel") || "medium",
+    whisper_engine:           getVal("cfgWhisperEngine") || "faster",
+    
     // Advanced AI
     ai_no_speech_threshold:   parseFloat(getVal("cfgAiNoSpeech")) || 0.6,
     ai_min_music_gap:         parseFloat(getVal("cfgAiMinGap")) || 3.0,
@@ -91,7 +111,8 @@ function gatherConfig() {
       initial_prompt:              getVal("cfgWhisperPrompt") || "",
       beam_size:                   parseInt(getVal("cfgWhisperBeamSize")) || 5,
       best_of:                     parseInt(getVal("cfgWhisperBestOf")) || 5,
-      vad_filter:                  getChecked("cfgWhisperVadFilter")
+      vad_filter:                  getChecked("cfgWhisperVadFilter"),
+      language:                    getVal("cfgWhisperLang") || ""
     },
 
     delivery: {

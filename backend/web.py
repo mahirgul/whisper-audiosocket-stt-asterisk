@@ -47,11 +47,23 @@ AUDIOSOCKET_CONFIG = os.path.join(BASE_DIR, "audiosocket.json")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Load default model/engine from config
+    model_name = args.model
+    engine_name = args.engine
+    config_path = os.path.join(BASE_DIR, "audiosocket.json")
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+                model_name = cfg.get("whisper_model", model_name)
+                engine_name = cfg.get("whisper_engine", engine_name)
+        except Exception:
+            pass
+
     # Start the shared Whisper model worker process
-    model_manager.start(args.model, args.engine)
+    model_manager.start(model_name, engine_name)
     # Tell the AudioSocket server where the project root is
     as_srv.set_base_dir(BASE_DIR)
-    config_path = os.path.join(BASE_DIR, "audiosocket.json")
     as_srv.start_server(config_path)
     yield
     as_srv.stop_server()
@@ -335,6 +347,15 @@ async def as_save_config(config: dict):
     with open(AUDIOSOCKET_CONFIG, "w", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=2)
     as_srv.start_server(AUDIOSOCKET_CONFIG)
+
+    # Check if model or engine changed, and hot-swap
+    new_model = config.get("whisper_model", "medium")
+    new_engine = config.get("whisper_engine", "faster")
+    if model_manager._model_name != new_model or model_manager._engine != new_engine:
+        print(f"[Web] Configuration changed AI model to '{new_model}' or engine to '{new_engine}'. Hot-swapping...")
+        model_manager.stop()
+        model_manager.start(new_model, new_engine)
+
     return {"status": "saved", "config": config}
 
 

@@ -137,6 +137,10 @@ def load_config(config_path: str) -> dict:
         "ai_no_speech_threshold": 0.6,
         "ai_min_music_gap": 3.0,
         "silence_frame_ms": 20,
+        "force_endian_swap": True,
+        "max_concurrent_connections": 10,
+        "bind_address": "127.0.0.1",
+        "auto_restart_worker": True,
         "whisper": {
             "task": "transcribe",
             "temperature": 0.0,
@@ -186,6 +190,7 @@ def start_server(config_path: str) -> None:
     with _config_lock:
         _config = load_config(config_path)
         port = _config.get("port", 9092)
+        bind_addr = _config.get("bind_address", "127.0.0.1")
 
     # Start session processing worker (serializes transcription jobs)
     # This thread stays alive even if the TCP server restarts due to config.
@@ -204,14 +209,20 @@ def start_server(config_path: str) -> None:
 
     def _run():
         asyncio.set_event_loop(_loop)
-        _loop.run_until_complete(_start_tcp(port))
-        _loop.run_forever()
+        try:
+            _loop.run_until_complete(_start_tcp(bind_addr, port))
+            _loop.run_forever()
+        finally:
+            try:
+                _loop.close()
+            except Exception:
+                pass
 
     _thread = threading.Thread(
         target=_run, daemon=True, name="AudioSocket-Thread"
     )
     _thread.start()
-    print(f"[AudioSocket] Server thread started — listening on port {port}")
+    print(f"[AudioSocket] Server thread started — listening on {bind_addr}:{port}")
 
 
 def stop_server() -> None:
@@ -288,12 +299,12 @@ def _session_processing_worker() -> None:
 # ---------------------------------------------------------------------------
 
 
-async def _start_tcp(port: int) -> None:
+async def _start_tcp(bind_address: str, port: int) -> None:
     global _server
     _server = await asyncio.start_server(
-        _connection_handler, host="0.0.0.0", port=port
+        _connection_handler, host=bind_address, port=port
     )
-    print(f"[AudioSocket] TCP server bound to 0.0.0.0:{port}")
+    print(f"[AudioSocket] TCP server bound to {bind_address}:{port}")
 
 
 async def _stop_tcp_force() -> None:
@@ -362,7 +373,19 @@ async def _connection_handler(
             writer.close()
             return
 
+        with _config_lock:
+            max_conns = _config.get("max_concurrent_connections", 10)
+
         with _connections_lock:
+            if len(_active_connections) >= max_conns:
+                print(f"[AudioSocket] Rejecting connection from {remote}: limit of {max_conns} reached.")
+                writer.close()
+                try:
+                    await writer.wait_closed()
+                except Exception:
+                    pass
+                return
+
             if session_id in _active_connections:
                 session_id = f"{session_id}-{_uuid.uuid4().hex[:4]}"
 
@@ -415,7 +438,7 @@ async def _connection_handler(
             sample_rate = cfg.get("input_sample_rate", 8000)
             channels = cfg.get("input_channels", 1)
             sample_width = cfg.get("input_sample_width", 2)
-            do_swap = cfg.get("force_endian_swap", False)
+            do_swap = cfg.get("force_endian_swap", True)
             debug_enabled = cfg.get("debug_mode", False)
             rms_threshold = cfg.get("vad_rms_threshold", 300)
             ignore_silence = cfg.get("ignore_silence_timeout", False)

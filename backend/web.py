@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, Header, Query, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
@@ -20,6 +20,27 @@ import state
 from backend.routes.models import router as models_router
 from backend.routes.history import router as history_router
 from backend.routes.audiosocket import router as audiosocket_router
+
+# ---------------------------------------------------------------------------
+# API Passcode Security Dependency
+# ---------------------------------------------------------------------------
+async def verify_passcode(
+    x_passcode: str = Header(None, alias="X-Passcode"),
+    passcode: str = Query(None)
+):
+    """
+    Dependency that loads configuration dynamically and validates the X-Passcode header
+    or passcode query param if a passcode is set.
+    """
+    cfg = as_srv.load_config(state.AUDIOSOCKET_CONFIG)
+    expected_passcode = cfg.get("web_passcode", "")
+    if expected_passcode:
+        token = x_passcode or passcode
+        if not token or token != expected_passcode:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Web Passcode"
+            )
 
 # ---------------------------------------------------------------------------
 # CLI Argument Parsing
@@ -88,9 +109,9 @@ app.add_middleware(
 )
 
 # Register sub-routers
-app.include_router(models_router)
-app.include_router(history_router)
-app.include_router(audiosocket_router)
+app.include_router(models_router, dependencies=[Depends(verify_passcode)])
+app.include_router(history_router, dependencies=[Depends(verify_passcode)])
+app.include_router(audiosocket_router, dependencies=[Depends(verify_passcode)])
 
 # ---------------------------------------------------------------------------
 # Core server stats & live updates
@@ -125,12 +146,12 @@ def update_stats():
 threading.Thread(target=update_stats, daemon=True).start()
 
 
-@app.get("/stats")
+@app.get("/stats", dependencies=[Depends(verify_passcode)])
 async def get_stats():
     return state.job_stats
 
 
-@app.get("/tasks")
+@app.get("/tasks", dependencies=[Depends(verify_passcode)])
 async def get_tasks():
     with model_manager._pending_lock:
         tasks = []

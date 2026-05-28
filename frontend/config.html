@@ -196,6 +196,12 @@
               <input id="cfgApiModelName" type="text" placeholder="whisper-1">
               <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">API model identifier.</div>
             </div>
+            
+            <div class="form-group" style="margin-top: 15px;">
+              <label>LLM Summarization Model Name</label>
+              <input id="cfgLlmModelName" type="text" placeholder="meta/llama-3.1-8b-instruct">
+              <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Model to use for generating session summaries (e.g. gpt-4o-mini, meta/llama-3.1-8b-instruct, llama3-8b-8192).</div>
+            </div>
           </div>
         </div>
       </div>
@@ -251,6 +257,20 @@
         </div>
       </div>
 
+      <!-- 2c. Access Security -->
+      <div class="card config-card">
+        <div class="card-header">
+          <div class="section-title">🔒 Access Security</div>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label>Web Passcode / API Key (Optional)</label>
+            <input id="cfgWebPasscode" type="password" placeholder="No passcode set (Unsecured)">
+            <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Set a passcode to secure web routing and API endpoints. Keep blank to disable.</div>
+          </div>
+        </div>
+      </div>
+
       <!-- 3. VAD -->
       <div class="card config-card">
         <div class="card-header">
@@ -273,6 +293,18 @@
             <label>Min Chunk Duration (ms)</label>
             <input id="cfgMinChunk" type="number" value="1000">
             <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Minimum audio chunk to process.</div>
+          </div>
+          <div class="toggle-row" style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 15px;">
+            <label for="cfgUseSileroVad">Use Neural Silero VAD (Advanced AI-based detection)</label>
+            <label class="toggle">
+              <input type="checkbox" id="cfgUseSileroVad">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="form-group" style="margin-top: 15px;">
+            <label>Silero VAD Speech Threshold (0.1 - 1.0)</label>
+            <input id="cfgSileroVadThreshold" type="number" step="0.05" min="0.1" max="1.0" value="0.5">
+            <div style="font-size:0.6rem; color:var(--muted); margin-top:4px;">Minimum probability of speech required to keep the chunk.</div>
           </div>
           <div class="toggle-row" style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 15px;">
             <label for="cfgIgnoreSilence">Ignore Silence Timeout (Keep connection open even if silent)</label>

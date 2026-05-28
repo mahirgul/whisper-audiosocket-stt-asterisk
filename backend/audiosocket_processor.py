@@ -9,6 +9,8 @@ import io
 import wave
 import asyncio
 import aiohttp
+import requests
+import json
 import time as _time
 import zipfile
 import os
@@ -110,3 +112,100 @@ def deliver_session_zip_sync(
             loop.close()
         except Exception:
             pass
+
+
+def generate_llm_summary(text: str, config: dict) -> dict:
+    """
+    Calls the configured cloud API chat completion endpoint to summarize the call transcript.
+    Returns a dict with 'summary_md' and 'sentiment'.
+    """
+    if not text.strip():
+        return {
+            "summary_md": "No speech detected in this call.",
+            "sentiment": "Neutral"
+        }
+
+    provider = config.get("api_provider", "local")
+    api_key = config.get("api_key", "")
+    if not api_key:
+        return {
+            "summary_md": "LLM Summarization requires a Cloud AI API key configured.",
+            "sentiment": "Unknown"
+        }
+
+    base_url = config.get("api_base_url", "")
+    if not base_url:
+        base_url = "https://api.openai.com/v1"
+
+    # Resolve Chat Completion endpoint
+    chat_url = f"{base_url.rstrip('/')}/chat/completions"
+    
+    # Resolve Model
+    model = config.get("llm_model_name", "")
+    if not model:
+        if "nvidia" in base_url:
+            model = "meta/llama-3.1-8b-instruct"
+        elif "groq" in base_url:
+            model = "llama3-8b-8192"
+        else:
+            model = "gpt-4o-mini"
+
+    # Construct headers
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+
+    # System prompt
+    system_prompt = (
+        "You are an expert AI call summarizer. Your task is to summarize the call transcript, "
+        "identify key action items, and determine the overall sentiment (Positive, Negative, or Neutral).\n"
+        "Provide the summary in clean markdown format, including a 'Summary' section, "
+        "an 'Action Items' bullet list, and a 'Sentiment' section."
+    )
+
+    user_prompt = f"Transcript:\n{text}"
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        "temperature": 0.5
+    }
+
+    try:
+        resp = requests.post(chat_url, headers=headers, json=payload, timeout=30)
+        if resp.status_code == 200:
+            result = resp.json()
+            content = result["choices"][0]["message"]["content"]
+            
+            # Simple sentiment parsing from content
+            sentiment = "Neutral"
+            content_lower = content.lower()
+            if "sentiment: positive" in content_lower or "sentiment: **positive**" in content_lower:
+                sentiment = "Positive"
+            elif "sentiment: negative" in content_lower or "sentiment: **negative**" in content_lower:
+                sentiment = "Negative"
+            elif "positive" in content_lower:
+                sentiment = "Positive"
+            elif "negative" in content_lower:
+                sentiment = "Negative"
+                
+            return {
+                "summary_md": content,
+                "sentiment": sentiment
+            }
+        else:
+            print(f"[LLM Summary] API Error ({resp.status_code}): {resp.text}")
+            return {
+                "summary_md": f"Failed to generate summary: API Error {resp.status_code}",
+                "sentiment": "Error"
+            }
+    except Exception as e:
+        print(f"[LLM Summary] Connection error: {e}")
+        return {
+            "summary_md": f"Failed to generate summary: {str(e)}",
+            "sentiment": "Error"
+        }

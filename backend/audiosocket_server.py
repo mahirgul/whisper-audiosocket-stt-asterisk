@@ -149,6 +149,10 @@ def load_config(config_path: str) -> dict:
         "input_sample_rate": 8000,
         "input_channels": 1,
         "input_sample_width": 2,
+        "use_silero_vad": False,
+        "silero_vad_threshold": 0.5,
+        "web_passcode": "",
+        "llm_model_name": "",
         "send_silence_frames": False,
         "vad_rms_threshold": 300,
         "vad_silence_threshold_ms": 5000,
@@ -365,6 +369,84 @@ def _swap_pcm16_endian(data: bytes) -> bytes:
         return data
 
 
+_silero_model = None
+_silero_lock = threading.Lock()
+
+def _get_silero_model():
+    """Load Silero VAD model via PyTorch Hub on demand, cached."""
+    global _silero_model
+    if _silero_model is not None:
+        return _silero_model
+    with _silero_lock:
+        if _silero_model is not None:
+            return _silero_model
+        try:
+            import torch
+            # Set threads to 1 for lightweight CPU usage
+            torch.set_num_threads(1)
+            model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', trust_repo=True)
+            model.eval()
+            _silero_model = model
+            print("[Silero VAD] Model loaded successfully via PyTorch Hub.")
+            return _silero_model
+        except Exception as e:
+            print(f"[Silero VAD] Error loading model via PyTorch Hub: {e}. Falling back to RMS VAD.")
+            return None
+
+
+def _is_silent_frame_neural(payload: bytes, sample_rate: int = 8000, threshold: float = 0.5) -> bool:
+    """
+    Check silence using Silero VAD.
+    """
+    if len(payload) < 2:
+        return True
+
+    model = _get_silero_model()
+    if model is None:
+        # Fallback to standard RMS-based silence check (using threshold translated to RMS or 300)
+        return _is_silent_frame(payload, threshold=300)
+
+    try:
+        import numpy as np
+        import torch
+
+        # Normalize 16-bit PCM to float32 range [-1.0, 1.0]
+        if len(payload) % 2 != 0:
+            payload = payload[:len(payload) - 1]
+
+        audio_data = np.frombuffer(payload, dtype=np.int16).astype(np.float32) / 32768.0
+
+        n = len(audio_data)
+        if sample_rate == 8000:
+            valid_sizes = [256, 512, 768]
+        else:
+            valid_sizes = [512, 1024, 1536]
+
+        target_size = valid_sizes[0]
+        for size in valid_sizes:
+            if n <= size:
+                target_size = size
+                break
+        else:
+            target_size = valid_sizes[-1]
+
+        if n < target_size:
+            pad_len = target_size - n
+            audio_data = np.pad(audio_data, (0, pad_len), mode='constant')
+        elif n > target_size:
+            audio_data = audio_data[:target_size]
+
+        tensor = torch.from_numpy(audio_data)
+        with torch.no_grad():
+            prob = model(tensor, sample_rate).item()
+        
+        # If probability of speech is below threshold, it's silent
+        return prob < threshold
+    except Exception as e:
+        # Fallback to RMS
+        return _is_silent_frame(payload, threshold=300)
+
+
 def _is_silent_frame(payload: bytes, threshold: int = 300) -> bool:
     """
     Check silence by RMS energy of the PCM frame.
@@ -559,10 +641,18 @@ async def _connection_handler(
                         if do_swap:
                             payload = _swap_pcm16_endian(payload)
 
-                        # RMS-based VAD (still track for debug stats)
-                        is_silent = _is_silent_frame(
-                            payload, threshold=rms_threshold
-                        )
+                        # VAD checking (Silero neural or RMS-based)
+                        if cfg.get("use_silero_vad", False):
+                            is_silent = _is_silent_frame_neural(
+                                payload,
+                                sample_rate=sample_rate,
+                                threshold=cfg.get("silero_vad_threshold", 0.5)
+                            )
+                        else:
+                            is_silent = _is_silent_frame(
+                                payload, threshold=rms_threshold
+                            )
+
                         if is_silent:
                             stats["vad_stats"]["silent_frames"] += 1
                         else:
@@ -727,6 +817,28 @@ async def _connection_handler(
                     wav_path, audio_buf, sample_rate, channels, sample_width
                 )
                 print(f"[AudioSocket] >>> FILE SAVED: {wav_path} (Session: {session_id[:8]})")
+                
+                # Split stereo tracks if channels == 2
+                if channels == 2:
+                    try:
+                        import numpy as np
+                        audio_np = np.frombuffer(audio_buf, dtype=np.int16)
+                        left_pcm = audio_np[0::2].tobytes()
+                        right_pcm = audio_np[1::2].tobytes()
+                        
+                        wav_path_l = os.path.join(out_dir, "chunk_001_l.wav")
+                        wav_path_r = os.path.join(out_dir, "chunk_001_r.wav")
+                        
+                        audiosocket_processor.save_wav(
+                            wav_path_l, left_pcm, sample_rate, 1, sample_width
+                        )
+                        audiosocket_processor.save_wav(
+                            wav_path_r, right_pcm, sample_rate, 1, sample_width
+                        )
+                        print(f"[AudioSocket] >>> Stereo split complete: L={wav_path_l}, R={wav_path_r}")
+                    except Exception as split_err:
+                        print(f"[AudioSocket] Error splitting stereo audio: {split_err}")
+
                 _emit_sync(
                     "file_saved",
                     {
@@ -882,19 +994,35 @@ def _process_session_blocking(
         if not os.path.exists(wav_path):
             raise Exception(f"WAV file not found: {wav_path}")
 
-        whisper_result = model_manager.transcribe(
-            wav_path, options=whisper_opts
-        )
-        raw_segments = whisper_result.get("segments", [])
-        
-        # Apply music detection logic
+        wav_path_l = os.path.join(out_dir, "chunk_001_l.wav")
+        wav_path_r = os.path.join(out_dir, "chunk_001_r.wav")
+
         min_gap = cfg.get("ai_min_music_gap", 3.0)
         no_speech_threshold = cfg.get("ai_no_speech_threshold", 0.6)
-        segments = utils.process_segments_with_music(
-            raw_segments, min_gap, no_speech_threshold
-        )
 
-        detected_lang = whisper_result.get("language", "") or "en"
+        if cfg.get("input_channels", 1) == 2 and os.path.exists(wav_path_l) and os.path.exists(wav_path_r):
+            print(f"[AudioSocket] Stereo detected. Transcribing Caller (L)...")
+            whisper_result_l = model_manager.transcribe(wav_path_l, options=whisper_opts)
+            raw_segments_l = whisper_result_l.get("segments", [])
+            segments_l = utils.process_segments_with_music(raw_segments_l, min_gap, no_speech_threshold)
+
+            print(f"[AudioSocket] Stereo detected. Transcribing Callee (R)...")
+            whisper_result_r = model_manager.transcribe(wav_path_r, options=whisper_opts)
+            raw_segments_r = whisper_result_r.get("segments", [])
+            segments_r = utils.process_segments_with_music(raw_segments_r, min_gap, no_speech_threshold)
+
+            segments = utils.merge_stereo_segments(segments_l, segments_r)
+            detected_lang = whisper_result_l.get("language", "") or "en"
+        else:
+            whisper_result = model_manager.transcribe(
+                wav_path, options=whisper_opts
+            )
+            raw_segments = whisper_result.get("segments", [])
+            segments = utils.process_segments_with_music(
+                raw_segments, min_gap, no_speech_threshold
+            )
+            detected_lang = whisper_result.get("language", "") or "en"
+
         orig_text = " ".join(s["text"].strip() for s in segments)
         print(
             f"[AudioSocket] Transcribed ({detected_lang}): "
@@ -913,6 +1041,25 @@ def _process_session_blocking(
         # 3. Save SRT file
         with open(orig_srt, "w", encoding="utf-8") as f:
             f.write(utils.to_srt(segments))
+
+        # Generate LLM Call Summary
+        try:
+            print(f"[AudioSocket] Generating LLM summary for session {session_id[:8]}")
+            summary_res = audiosocket_processor.generate_llm_summary(orig_text, cfg)
+            
+            # Save summary.md
+            summary_md_path = os.path.join(out_dir, "summary.md")
+            with open(summary_md_path, "w", encoding="utf-8") as f:
+                f.write(summary_res.get("summary_md", ""))
+                
+            # Save summary.json
+            summary_json_path = os.path.join(out_dir, "summary.json")
+            with open(summary_json_path, "w", encoding="utf-8") as f:
+                json.dump(summary_res, f, ensure_ascii=False, indent=2)
+                
+            print(f"[AudioSocket] LLM summary saved for session {session_id[:8]}")
+        except Exception as summary_err:
+            print(f"[AudioSocket] Failed to generate LLM summary: {summary_err}")
 
         # 4. REST Delivery
         delivery_cfg = cfg.get("delivery", {})

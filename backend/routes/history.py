@@ -63,7 +63,7 @@ async def transcribe(
 
 
 @router.get("/history")
-async def get_history(page: int = 1, limit: int = 20):
+async def get_history(page: int = 1, limit: int = 20, q: str = None):
     items = []
     if os.path.exists(state.OUTPUT_DIR):
         for fn in os.listdir(state.OUTPUT_DIR):
@@ -72,6 +72,15 @@ async def get_history(page: int = 1, limit: int = 20):
                     meta_p = os.path.join(state.OUTPUT_DIR, fn)
                     with open(meta_p, "r", encoding="utf-8") as f:
                         meta = json.load(f)
+                        
+                        if q:
+                            q_lower = q.lower()
+                            txt_l = meta.get("orig_l", "").lower()
+                            txt_r = meta.get("orig_r", "").lower()
+                            fn_lower = fn.lower()
+                            if q_lower not in txt_l and q_lower not in txt_r and q_lower not in fn_lower:
+                                continue
+
                         ts = meta.get("time") or os.path.getmtime(meta_p)
                         items.append({
                             "name": fn.replace(".json", ""),
@@ -134,3 +143,32 @@ async def download_history_zip(job_id: str):
     if not found: raise HTTPException(status_code=404)
     zip_buffer.seek(0)
     return StreamingResponse(zip_buffer, media_type="application/zip", headers={"Content-Disposition": f"attachment; filename={job_id}.zip"})
+
+
+from pydantic import BaseModel
+
+class TranscriptUpdate(BaseModel):
+    orig_l: str = None
+    orig_r: str = None
+
+@router.post("/history/update/{job_id}")
+async def update_transcript(job_id: str, payload: TranscriptUpdate):
+    p = state.get_safe_path(state.OUTPUT_DIR, job_id + ".json")
+    if not os.path.exists(p):
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+            
+        if payload.orig_l is not None:
+            meta["orig_l"] = payload.orig_l
+        if payload.orig_r is not None:
+            meta["orig_r"] = payload.orig_r
+            
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+            
+        return {"status": "success", "meta": meta}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -36,3 +36,31 @@ def process_segments_with_music(
                 )
         processed.append(s)
     return processed
+
+
+def merge_stereo_segments(segs_l: list, segs_r: list) -> list:
+    """
+    Merge left (Caller) and right (Callee) Whisper segments, prepending labels
+    and sorting chronologically by start time.
+    """
+    merged = []
+    for s in segs_l:
+        txt = s.get("text", "").strip()
+        if not txt:
+            continue
+        if txt == "[MUSIC]":
+            merged.append({"start": s["start"], "end": s["end"], "text": "[MUSIC]"})
+        else:
+            merged.append({"start": s["start"], "end": s["end"], "text": f"[Caller]: {txt}"})
+
+    for s in segs_r:
+        txt = s.get("text", "").strip()
+        if not txt:
+            continue
+        if txt == "[MUSIC]":
+            merged.append({"start": s["start"], "end": s["end"], "text": "[MUSIC]"})
+        else:
+            merged.append({"start": s["start"], "end": s["end"], "text": f"[Callee]: {txt}"})
+
+    merged.sort(key=lambda x: x["start"])
+    return merged

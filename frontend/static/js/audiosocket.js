@@ -29,7 +29,9 @@ document.addEventListener("DOMContentLoaded", () => {
 function connectSSE() {
   if (sseSource) sseSource.close();
 
-  sseSource = new EventSource("/audiosocket/stream");
+  const passcode = localStorage.getItem("wasa_passcode") || "";
+  const url = passcode ? `/audiosocket/stream?passcode=${encodeURIComponent(passcode)}` : "/audiosocket/stream";
+  sseSource = new EventSource(url);
 
   sseSource.onmessage = (e) => {
     try {

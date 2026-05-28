@@ -132,6 +132,9 @@ function applyConfigToForm(cfg) {
   setVal("cfgSampleRate",   cfg.input_sample_rate);
   setVal("cfgChannels",     cfg.input_channels);
   setVal("cfgSampleWidth",  cfg.input_sample_width);
+  setChecked("cfgUseSileroVad", cfg.use_silero_vad || false);
+  setVal("cfgSileroVadThreshold", cfg.silero_vad_threshold ?? 0.5);
+  setVal("cfgWebPasscode",   cfg.web_passcode || "");
   setVal("cfgSilence",      cfg.vad_silence_threshold_ms);
   setVal("cfgRmsThreshold", cfg.vad_rms_threshold || 300);
   setVal("cfgMinChunk",     cfg.vad_min_chunk_ms);
@@ -150,6 +153,7 @@ function applyConfigToForm(cfg) {
   setVal("cfgApiBaseUrl",   cfg.api_base_url || "");
   setVal("cfgApiKey",       cfg.api_key || "");
   setVal("cfgApiModelName", cfg.api_model_name || "");
+  setVal("cfgLlmModelName", cfg.llm_model_name || "");
   
   // Custom added configurations
   setVal("cfgLocalDevice",  cfg.local_whisper_device || "auto");
@@ -200,6 +204,9 @@ function gatherConfig() {
     input_sample_rate:        parseInt(getVal("cfgSampleRate")) || 8000,
     input_channels:           parseInt(getVal("cfgChannels")) || 1,
     input_sample_width:       parseInt(getVal("cfgSampleWidth")) || 2,
+    use_silero_vad:           getChecked("cfgUseSileroVad"),
+    silero_vad_threshold:     parseFloat(getVal("cfgSileroVadThreshold")) || 0.5,
+    web_passcode:             getVal("cfgWebPasscode") || "",
     vad_silence_threshold_ms: parseInt(getVal("cfgSilence")) || 1500,
     vad_rms_threshold:        parseInt(getVal("cfgRmsThreshold")) || 300,
     vad_min_chunk_ms:         parseInt(getVal("cfgMinChunk")) || 1000,
@@ -218,6 +225,7 @@ function gatherConfig() {
     api_base_url:             getVal("cfgApiBaseUrl") || "",
     api_key:                  getVal("cfgApiKey") || "",
     api_model_name:           getVal("cfgApiModelName") || "",
+    llm_model_name:           getVal("cfgLlmModelName") || "",
 
     // Custom added configurations
     local_whisper_device:       getVal("cfgLocalDevice") || "auto",
@@ -312,17 +320,20 @@ window.toggleApiFields = function(provider) {
         { value: "nvidia/parakeet-rnnt-1.1b", label: "NVIDIA Parakeet RNNT 1.1B" }
       ];
       setVal("cfgApiBaseUrl", "https://integrate.api.nvidia.com/v1");
+      setVal("cfgLlmModelName", "meta/llama-3.1-8b-instruct");
     } else if (provider === "openai") {
       models = [
         { value: "whisper-1", label: "OpenAI Whisper-1 (Default)" }
       ];
       setVal("cfgApiBaseUrl", "https://api.openai.com/v1");
+      setVal("cfgLlmModelName", "gpt-4o-mini");
     } else if (provider === "groq") {
       models = [
         { value: "whisper-large-v3", label: "Groq Whisper Large v3 (Default)" },
         { value: "distil-whisper-large-v3-en", label: "Groq Distil Whisper Large v3 English" }
       ];
       setVal("cfgApiBaseUrl", "https://api.groq.com/openapi/v1");
+      setVal("cfgLlmModelName", "llama3-8b-8192");
     } else if (provider === "custom") {
       showCustomModelInput = true;
       showBaseUrlInput = true;

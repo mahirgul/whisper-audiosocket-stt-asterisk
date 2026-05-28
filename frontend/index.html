@@ -111,9 +111,24 @@
 
             <!-- Transcript cards -->
             <div id="resultsGrid" class="results-grid" style="display:none;">
-                <div class="section-label">Transcripts</div>
-                <div class="card"><div class="card-header">ORIGINAL LEFT</div><div id="boxOL" class="content">...</div></div>
-                <div class="card"><div class="card-header">ORIGINAL RIGHT</div><div id="boxOR" class="content">...</div></div>
+                <div class="section-label" style="display:flex; justify-content:space-between; align-items:center;">
+                    <span>Transcripts</span>
+                    <button id="btnSaveTranscripts" class="btn btn-sm btn-primary" onclick="saveEditedTranscripts()" style="font-size:0.65rem; padding:4px 10px; display:none; background:#22c55e; border-color:#22c55e;">💾 Save Changes</button>
+                </div>
+                <div class="card">
+                    <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+                        <span>ORIGINAL LEFT (CALLER)</span>
+                        <span style="font-size:0.6rem; color:var(--muted); font-weight:normal;">Click text below to edit</span>
+                    </div>
+                    <div id="boxOL" class="content" contenteditable="true" oninput="showSaveTranscriptBtn()" style="outline:none; white-space:pre-wrap; min-height:100px; padding: 12px;">...</div>
+                </div>
+                <div class="card">
+                    <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+                        <span>ORIGINAL RIGHT (CALLEE)</span>
+                        <span style="font-size:0.6rem; color:var(--muted); font-weight:normal;">Click text below to edit</span>
+                    </div>
+                    <div id="boxOR" class="content" contenteditable="true" oninput="showSaveTranscriptBtn()" style="outline:none; white-space:pre-wrap; min-height:100px; padding: 12px;">...</div>
+                </div>
             </div>
 
         </div><!-- /.left-panel -->
@@ -125,6 +140,11 @@
                 <button class="btn btn-sm" style="background:#f1f5f9; color:#64748b;" onclick="loadHistory(1)">🔄 Refresh</button>
             </div>
             <div class="card-body">
+                <!-- Search filter -->
+                <div class="form-group" style="margin-bottom: 12px;">
+                    <input type="text" id="historySearch" placeholder="🔍 Search transcripts..." oninput="loadHistory(1)" style="width: 100%; border-radius: 8px; border: 1px solid var(--border); padding: 8px; font-size: 0.75rem; background: var(--bg); color: var(--foreground);">
+                </div>
+
                 <!-- Bulk actions -->
                 <div id="bulkActions" class="bulk-actions">
                     <div style="display:flex; align-items:center; gap:8px;">

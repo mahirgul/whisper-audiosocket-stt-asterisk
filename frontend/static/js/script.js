@@ -1,5 +1,5 @@
 let ws, audioCtx, audioEl, sourceNode, splitter, merger, leftGain, rightGain;
-let currentPage = 1, historyItems = [];
+let currentPage = 1, historyItems = [], activeJobId = null;
 
 async function checkStatus() {
     try {
@@ -142,7 +142,8 @@ function initWavesurfer(url) {
 async function loadHistory(page = 1) {
     try {
         currentPage = page;
-        const r = await fetch(`/history?page=${page}`);
+        const q = (document.getElementById('historySearch') || {}).value || "";
+        const r = await fetch(`/history?page=${page}&q=${encodeURIComponent(q)}`);
         const data = await r.json();
         historyItems = data.items;
         const container = document.getElementById('historyList');
@@ -234,6 +235,11 @@ async function deleteFromHistory(filename, event) {
 function loadFromHistory(idx, el) {
     const item = historyItems[idx];
     if(!item) return;
+    activeJobId = item.name;
+    // Hide save button
+    const btn = document.getElementById("btnSaveTranscripts");
+    if (btn) btn.style.display = "none";
+
     document.querySelectorAll('.history-item').forEach(i => i.classList.remove('active'));
     el.classList.add('active');
     document.getElementById('setupArea').style.display = 'none';
@@ -284,6 +290,11 @@ async function handleProcessing(endpoint, payload) {
         document.getElementById('boxOL').innerText = data.orig_l;
         document.getElementById('boxOR').innerText = data.orig_r;
         document.getElementById('resultsGrid').style.display = 'grid';
+        activeJobId = data.job_id;
+        
+        // Hide save button
+        const btn = document.getElementById("btnSaveTranscripts");
+        if (btn) btn.style.display = "none";
 
         if (data.audio_url) {
             initWavesurfer(data.audio_url + "?t=" + Date.now());
@@ -304,3 +315,41 @@ document.addEventListener('DOMContentLoaded', () => {
     checkStatus(); // Immediate check
     loadHistory(1);
 });
+
+
+function showSaveTranscriptBtn() {
+    const btn = document.getElementById("btnSaveTranscripts");
+    if (btn) btn.style.display = "inline-block";
+}
+
+async function saveEditedTranscripts() {
+    if (!activeJobId) return;
+    const orig_l = document.getElementById("boxOL").innerText;
+    const orig_r = document.getElementById("boxOR").innerText;
+    
+    try {
+        const r = await fetch(`/history/update/${activeJobId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orig_l, orig_r })
+        });
+        if (!r.ok) throw new Error(await r.text());
+        
+        const data = await r.json();
+        
+        // Hide button again
+        const btn = document.getElementById("btnSaveTranscripts");
+        if (btn) btn.style.display = "none";
+        
+        // Update history cache to prevent reload from reverting edits
+        const cachedItem = historyItems.find(item => item.name === activeJobId);
+        if (cachedItem && cachedItem.meta) {
+            cachedItem.meta.orig_l = orig_l;
+            cachedItem.meta.orig_r = orig_r;
+        }
+        
+        alert("Transcript saved successfully!");
+    } catch (e) {
+        alert("Failed to save transcript: " + e.message);
+    }
+}

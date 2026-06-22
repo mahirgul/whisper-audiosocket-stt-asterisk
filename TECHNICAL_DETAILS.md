@@ -11,7 +11,7 @@ WASA (Whisper AudioSocket Asterisk) operates on a **Decoupled Multi-Process Arch
 ### 1. The Core Components
 *   **Web Server (FastAPI):** Handles the dashboard, API requests, and serves the static frontend.
 *   **AudioSocket Server (Async TCP):** A dedicated thread running an asynchronous TCP server that listens for Asterisk connections.
-*   **Model Worker (Multiprocessing):** A separate OS process that keeps the Whisper model loaded in VRAM/RAM. It communicates via an internal queue to serialize transcription tasks.
+*   **Model Worker (Multiprocessing):** A separate OS process that keeps the AI model (Whisper or Microsoft VibeVoice) loaded in VRAM/RAM. It communicates via an internal queue to serialize transcription tasks.
 
 ### 2. Audio Flow Logic
 1.  **Reception:** Audio arrives as raw PCM (Signed Linear) via TCP.
@@ -19,6 +19,12 @@ WASA (Whisper AudioSocket Asterisk) operates on a **Decoupled Multi-Process Arch
 3.  **Buffering:** Audio is stored in RAM during the call to ensure zero disk I/O latency during live reception.
 4.  **Immediate Persistence:** As soon as a connection hangs up, the memory buffer is flushed to a `.wav` file on disk. This happens *before* queuing for AI, ensuring that the file is safe and visible in the UI immediately, even if the AI worker is busy with previous tasks.
 5.  **Serialized Transcription:** The Model Worker process pulls from the queue and transcribes the already-saved files one by one.
+
+### 3. Microsoft VibeVoice ASR Integration
+Introduced in **v2.5.0**, WASA features native support for the `microsoft/VibeVoice-ASR-HF` model running locally.
+*   **Timestamped Speaker Diarization:** Unlike standard Whisper models that require a separate diarization pipeline, VibeVoice natively tags speech segments with speaker IDs and precise timestamps in a single generation pass.
+*   **Single-Pass Processing:** It can process long audio streams without requiring chunk-based slicing, preventing semantic context loss.
+*   **Modular Architecture:** Handled dynamically via `backend/vibevoice_helper.py` to prevent code bloat in the core worker process.
 
 ---
 

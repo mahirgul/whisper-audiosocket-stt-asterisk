@@ -12,3 +12,5 @@ psutil
 aiohttp
 aiofiles
 audioop-lts
+transformers
+

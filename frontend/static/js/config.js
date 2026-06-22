@@ -33,7 +33,12 @@ async function refreshModelStatus() {
     let html = "";
     
     // Filter models based on currentEngine
-    let models = list.filter(m => m.type === "whisper");
+    let models = list.filter(m => {
+      if (currentEngine === "vibevoice") {
+        return m.type === "vibevoice";
+      }
+      return m.type === "whisper";
+    });
 
     const renderRow = (modelId, engine, isDownloaded, isDownloading) => {
       const isSelected = (currentModel === modelId && currentEngine === engine);
@@ -74,7 +79,7 @@ async function refreshModelStatus() {
     };
 
     models.forEach(m => {
-      const isDownloaded = (currentEngine === "faster" ? m.faster : (currentEngine === "openai" ? m.openai : m.nvidia));
+      const isDownloaded = (currentEngine === "faster" ? m.faster : (currentEngine === "openai" ? m.openai : (currentEngine === "vibevoice" ? m.vibevoice : m.nvidia)));
       const isDownloading = downloading.includes(`${m.id}_${currentEngine}`);
       html += renderRow(m.id, currentEngine, isDownloaded, isDownloading);
     });
@@ -149,6 +154,10 @@ function applyConfigToForm(cfg) {
   setChecked("cfgAutoRestart", cfg.auto_restart_worker ?? true);
   setVal("cfgWhisperModel", cfg.whisper_model || "medium");
   setVal("cfgWhisperEngine", cfg.whisper_engine || "faster");
+  const engineSelect = document.getElementById("engineListBox");
+  if (engineSelect) {
+    engineSelect.value = cfg.whisper_engine || "faster";
+  }
   setVal("cfgApiProvider",  cfg.api_provider || "local");
   setVal("cfgApiBaseUrl",   cfg.api_base_url || "");
   setVal("cfgApiKey",       cfg.api_key || "");

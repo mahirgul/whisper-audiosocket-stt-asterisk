@@ -50,7 +50,7 @@ parser.add_argument(
     "--model", type=str, default="medium", help="Whisper model to use"
 )
 parser.add_argument(
-    "--engine", type=str, default="openai", choices=["openai", "faster"], help="Whisper engine to use"
+    "--engine", type=str, default="openai", choices=["openai", "faster", "vibevoice"], help="Whisper engine to use"
 )
 parser.add_argument(
     "--host", type=str, default=None, help="FastAPI host address"

@@ -60,6 +60,7 @@ pip install audioop-lts
 echo ""
 echo "[5/5] Creating required directories..."
 mkdir -p models/whisper
+mkdir -p models/vibevoice
 mkdir -p outputs
 echo "   Directories are ready."
 

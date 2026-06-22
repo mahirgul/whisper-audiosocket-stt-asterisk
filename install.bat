@@ -96,6 +96,7 @@ if %errorlevel% neq 0 (
 echo.
 echo [5/5] Creating required directories...
 if not exist "models\whisper" mkdir "models\whisper"
+if not exist "models\vibevoice" mkdir "models\vibevoice"
 if not exist "outputs"        mkdir "outputs"
 echo   Directories are ready.
 

@@ -7,10 +7,13 @@ router = APIRouter()
 
 @router.post("/models/download/{model_id}")
 async def download_model(model_id: str, engine: str = "faster"):
-    """Trigger a background download for a Whisper model."""
+    """Trigger a background download for a Whisper model or VibeVoice."""
     valid_whisper = ["tiny", "base", "small", "medium", "large-v3", "turbo"]
     
-    if model_id not in valid_whisper:
+    if engine == "vibevoice":
+        if model_id != "vibevoice-asr":
+            raise HTTPException(status_code=400, detail="Invalid VibeVoice model ID")
+    elif model_id not in valid_whisper:
         raise HTTPException(status_code=400, detail="Invalid model ID")
     
     key = f"{model_id}_{engine}"
@@ -42,7 +45,7 @@ async def get_download_status():
 
 @router.get("/models/list")
 async def list_models():
-    """Checks the models directory for downloaded models (Whisper)."""
+    """Checks the models directory for downloaded models (Whisper & VibeVoice)."""
     model_dir = os.path.join(state.BASE_DIR, "models", "whisper")
     whisper_models = ["tiny", "base", "small", "medium", "large-v3", "turbo"]
     
@@ -65,4 +68,14 @@ async def list_models():
             "type": "whisper"
         })
         
+    # VibeVoice check
+    vibevoice_dir = os.path.join(state.BASE_DIR, "models", "vibevoice")
+    vibevoice_exists = os.path.exists(os.path.join(vibevoice_dir, "models--microsoft--VibeVoice-ASR-HF"))
+    
+    results.append({
+        "id": "vibevoice-asr",
+        "vibevoice": vibevoice_exists,
+        "type": "vibevoice"
+    })
+    
     return results

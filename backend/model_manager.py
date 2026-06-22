@@ -436,7 +436,11 @@ def _worker_main(
         )
 
         model = None
-        if engine == "faster":
+        if engine == "vibevoice":
+            import vibevoice_helper
+            vibevoice_dir = os.path.join(BASE_DIR, "models", "vibevoice")
+            model = vibevoice_helper.load_vibevoice_model(device, compute_type, vibevoice_dir)
+        elif engine == "faster":
             from faster_whisper import WhisperModel
 
             print(f"[ModelWorker] Loading faster-whisper '{model_name}' ({compute_type}) ...")
@@ -493,7 +497,19 @@ def _worker_main(
             )
 
             try:
-                if engine == "faster":
+                if engine == "vibevoice":
+                    import vibevoice_helper
+                    res = vibevoice_helper.transcribe_vibevoice(model, audio_path, options)
+                    resp_q.put(
+                        {
+                            "type": "result",
+                            "id": req_id,
+                            "segments": res.get("segments", []),
+                            "text": res.get("text", ""),
+                            "language": res.get("language", ""),
+                        }
+                    )
+                elif engine == "faster":
                     # Map openai options to faster-whisper options
                     if "logprob_threshold" in options:
                         options["log_prob_threshold"] = options.pop("logprob_threshold")

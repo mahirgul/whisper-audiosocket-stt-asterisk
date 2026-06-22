@@ -126,6 +126,28 @@ def download_model_task(model_id: str, engine: str, base_dir: str):
             add_system_log("NVIDIA models cannot be downloaded or executed locally.", "WARNING")
             raise RuntimeError("NVIDIA models must be executed via the NVIDIA API Catalog provider.")
             
+        elif engine == "vibevoice":
+            # microsoft/VibeVoice-ASR-HF download via huggingface_hub snapshot_download
+            model_dir = os.path.join(base_dir, "models", "vibevoice")
+            repo_id = "microsoft/VibeVoice-ASR-HF"
+            
+            WebProgressTqdm.current_key = key
+            
+            print(f"{Colors.OKCYAN}[DOWNLOAD]{Colors.ENDC} Starting download for {key} via Hugging Face...")
+            huggingface_hub.snapshot_download(
+                repo_id,
+                cache_dir=model_dir,
+                tqdm_class=WebProgressTqdm
+            )
+            print(f"\n{Colors.OKGREEN}[DOWNLOAD COMPLETE]{Colors.ENDC} {key} completed.")
+            update_progress(key, 100, 100)
+            
+            try:
+                from transformers import AutoProcessor
+                AutoProcessor.from_pretrained(repo_id, cache_dir=model_dir)
+            except Exception as load_err:
+                print(f"[DOWNLOAD] Warning loading VibeVoice processor: {load_err}")
+                
         elif engine == "faster":
             # Faster-Whisper models download via huggingface_hub snapshot_download
             model_dir = os.path.join(base_dir, "models", "whisper")

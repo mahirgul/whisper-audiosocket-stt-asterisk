@@ -99,6 +99,7 @@ def deliver_session_zip_sync(
     session_dir: str, config: dict, session_id: str
 ) -> int:
     """Synchronous wrapper for deliver_session_zip."""
+    loop = None
     try:
         loop = asyncio.new_event_loop()
         return loop.run_until_complete(
@@ -108,10 +109,11 @@ def deliver_session_zip_sync(
         print(f"[Delivery] Sync zip error: {e}")
         return 500
     finally:
-        try:
-            loop.close()
-        except Exception:
-            pass
+        if loop is not None:
+            try:
+                loop.close()
+            except Exception:
+                pass
 
 
 def generate_llm_summary(text: str, config: dict) -> dict:

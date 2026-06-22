@@ -106,6 +106,13 @@ def check_and_restart_worker() -> None:
         return
 
     if not _process.is_alive():
+        # Notify any pending requests immediately that the worker process has died
+        with _pending_lock:
+            for req_id, entry in list(_pending.items()):
+                if entry["result"] is None:
+                    entry["result"] = {"type": "error", "error": "Whisper worker process died unexpectedly."}
+                    entry["event"].set()
+
         if auto_restart and model_status != "error":
             log_warn("Whisper worker process died. Auto-restarting...")
             stop()

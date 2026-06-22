@@ -92,6 +92,10 @@ async def lifespan(app: FastAPI):
     as_srv.set_base_dir(state.BASE_DIR)
     log_info("Starting AudioSocket server...")
     as_srv.start_server(state.AUDIOSOCKET_CONFIG)
+    
+    # Start the system stats updater thread
+    log_info("Starting stats updater thread...")
+    threading.Thread(target=update_stats, daemon=True).start()
     yield
     log_info("Shutting down servers...")
     as_srv.stop_server()
@@ -143,7 +147,7 @@ def update_stats():
         time.sleep(1)
 
 
-threading.Thread(target=update_stats, daemon=True).start()
+# Stats thread is started dynamically in the lifespan startup hook
 
 
 @app.get("/stats", dependencies=[Depends(verify_passcode)])

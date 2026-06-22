@@ -98,7 +98,7 @@ async def as_sessions(page: int = 1, limit: int = 20):
                     "uuid": entry.name,
                     "status": meta.get("status", "unknown"),
                     "started": meta.get("started", datetime.fromtimestamp(os.path.getmtime(entry.path), tz=timezone.utc).isoformat()),
-                    "duration_s": float(meta.get("duration_s", 0)),
+                    "duration_s": float(meta.get("duration_s") or 0),
                 })
     sessions.sort(key=lambda x: x["started"], reverse=True)
     start = (page - 1) * limit
@@ -117,8 +117,13 @@ async def as_session_detail(session_uuid: str):
     files = sorted(os.listdir(session_dir))
     for fn in files:
         if fn.startswith("chunk_") and fn.endswith(".wav"):
-            idx = int(fn.split("_")[1].split(".")[0])
-            chunks.append({"index": idx, "wav": f"/audiosocket-files/{session_uuid}/{fn}"})
+            try:
+                parts = fn.split("_")
+                if len(parts) > 1:
+                    idx = int(parts[1].split(".")[0])
+                    chunks.append({"index": idx, "wav": f"/audiosocket-files/{session_uuid}/{fn}"})
+            except (ValueError, IndexError):
+                pass
     return {"uuid": session_uuid, "meta": meta, "chunks": chunks}
 
 
@@ -137,8 +142,9 @@ async def as_sse_stream():
         try:
             while True:
                 try:
-                    event = q.get_nowait()
+                    event = await asyncio.to_thread(q.get, timeout=1.0)
                     yield f"data: {json.dumps(event)}\n\n"
-                except queue.Empty: await asyncio.sleep(0.5)
+                except queue.Empty:
+                    pass
         finally: as_srv.unsubscribe(q)
     return StreamingResponse(event_generator(), media_type="text/event-stream")

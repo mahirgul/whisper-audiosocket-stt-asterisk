@@ -370,16 +370,17 @@ def _swap_pcm16_endian(data: bytes) -> bytes:
 
 
 _silero_model = None
+_silero_failed = False
 _silero_lock = threading.Lock()
 
 def _get_silero_model():
     """Load Silero VAD model via PyTorch Hub on demand, cached."""
-    global _silero_model
-    if _silero_model is not None:
-        return _silero_model
+    global _silero_model, _silero_failed
+    if _silero_model is not None or _silero_failed:
+        return _silero_model if not _silero_failed else None
     with _silero_lock:
-        if _silero_model is not None:
-            return _silero_model
+        if _silero_model is not None or _silero_failed:
+            return _silero_model if not _silero_failed else None
         try:
             import torch
             # Set threads to 1 for lightweight CPU usage
@@ -391,6 +392,7 @@ def _get_silero_model():
             return _silero_model
         except Exception as e:
             print(f"[Silero VAD] Error loading model via PyTorch Hub: {e}. Falling back to RMS VAD.")
+            _silero_failed = True
             return None
 
 
@@ -813,6 +815,10 @@ async def _connection_handler(
                     channels = _config.get("input_channels", 1)
                     sample_width = _config.get("input_sample_width", 2)
 
+                # Ensure buffer is multiple of sample_width to avoid numpy/wave crash
+                if len(audio_buf) % sample_width != 0:
+                    audio_buf = audio_buf[:-(len(audio_buf) % sample_width)]
+
                 audiosocket_processor.save_wav(
                     wav_path, audio_buf, sample_rate, channels, sample_width
                 )
@@ -1001,18 +1007,26 @@ def _process_session_blocking(
         no_speech_threshold = cfg.get("ai_no_speech_threshold", 0.6)
 
         if cfg.get("input_channels", 1) == 2 and os.path.exists(wav_path_l) and os.path.exists(wav_path_r):
-            print(f"[AudioSocket] Stereo detected. Transcribing Caller (L)...")
-            whisper_result_l = model_manager.transcribe(wav_path_l, options=whisper_opts)
-            raw_segments_l = whisper_result_l.get("segments", [])
-            segments_l = utils.process_segments_with_music(raw_segments_l, min_gap, no_speech_threshold)
+            try:
+                print(f"[AudioSocket] Stereo detected. Transcribing Caller (L)...")
+                whisper_result_l = model_manager.transcribe(wav_path_l, options=whisper_opts)
+                raw_segments_l = whisper_result_l.get("segments", [])
+                segments_l = utils.process_segments_with_music(raw_segments_l, min_gap, no_speech_threshold)
 
-            print(f"[AudioSocket] Stereo detected. Transcribing Callee (R)...")
-            whisper_result_r = model_manager.transcribe(wav_path_r, options=whisper_opts)
-            raw_segments_r = whisper_result_r.get("segments", [])
-            segments_r = utils.process_segments_with_music(raw_segments_r, min_gap, no_speech_threshold)
+                print(f"[AudioSocket] Stereo detected. Transcribing Callee (R)...")
+                whisper_result_r = model_manager.transcribe(wav_path_r, options=whisper_opts)
+                raw_segments_r = whisper_result_r.get("segments", [])
+                segments_r = utils.process_segments_with_music(raw_segments_r, min_gap, no_speech_threshold)
 
-            segments = utils.merge_stereo_segments(segments_l, segments_r)
-            detected_lang = whisper_result_l.get("language", "") or "en"
+                segments = utils.merge_stereo_segments(segments_l, segments_r)
+                detected_lang = whisper_result_l.get("language", "") or "en"
+            finally:
+                for p in (wav_path_l, wav_path_r):
+                    if os.path.exists(p):
+                        try:
+                            os.unlink(p)
+                        except Exception:
+                            pass
         else:
             whisper_result = model_manager.transcribe(
                 wav_path, options=whisper_opts

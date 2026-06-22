@@ -1,4 +1,4 @@
-# 🎙️ WASA — Whisper AudioSocket Asterisk (v2.5.0)
+# 🎙️ WASA — Whisper AudioSocket Asterisk (v2.5.1)
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.10+">

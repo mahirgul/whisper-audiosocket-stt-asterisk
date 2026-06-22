@@ -60,25 +60,37 @@ async def transcribe_audio(
     if len(channels) < 2:
         channels = [channels[0], channels[0]]
 
-    # Transcribe L & R via the shared model process
     l_path = file_path + "_l.wav"
-    channels[0].export(l_path, format="wav")
-    
-    # Update status for feedback
-    model_manager.model_status = "processing"
-    model_manager.current_task = f"AI: Transcribing Left Channel ({label})..."
-    
-    res_l = await model_manager.transcribe_async(l_path, options=whisper_opts, label=f"{label} (L)")
-    os.unlink(l_path)
-
     r_path = file_path + "_r.wav"
-    channels[1].export(r_path, format="wav")
-    
-    # Update status for feedback
-    model_manager.current_task = f"AI: Transcribing Right Channel ({label})..."
-    
-    res_r = await model_manager.transcribe_async(r_path, options=whisper_opts, label=f"{label} (R)")
-    os.unlink(r_path)
+
+    try:
+        # Transcribe Left Channel via the shared model process
+        channels[0].export(l_path, format="wav")
+        
+        # Update status for feedback
+        model_manager.model_status = "processing"
+        model_manager.current_task = f"AI: Transcribing Left Channel ({label})..."
+        
+        res_l = await model_manager.transcribe_async(l_path, options=whisper_opts, label=f"{label} (L)")
+    finally:
+        if os.path.exists(l_path):
+            os.unlink(l_path)
+
+    if original_channels == 1:
+        # Avoid transcribing the exact same mono audio twice
+        res_r = res_l
+    else:
+        try:
+            # Transcribe Right Channel via the shared model process
+            channels[1].export(r_path, format="wav")
+            
+            # Update status for feedback
+            model_manager.current_task = f"AI: Transcribing Right Channel ({label})..."
+            
+            res_r = await model_manager.transcribe_async(r_path, options=whisper_opts, label=f"{label} (R)")
+        finally:
+            if os.path.exists(r_path):
+                os.unlink(r_path)
 
     model_manager.current_task = "AI: Finalizing results..."
 

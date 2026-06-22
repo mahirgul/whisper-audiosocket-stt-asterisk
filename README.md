@@ -20,6 +20,7 @@ WASA features a high-performance **Multi-Process Architecture**, offloading heav
 ## ✨ Key Features
 
 *   🚀 **Multi-Process AI Pipeline:** Dedicated model worker process manages a single local Whisper or VibeVoice instance to guarantee web responsiveness under load.
+*   🎙️ **Dual Whisper Engines:** Full support for both **Faster-Whisper** (highly optimized for fast inference on CPU/GPU) and **OpenAI Whisper** (standard PyTorch). Compatible with models `tiny`, `base`, `small`, `medium`, `large-v3`, and `turbo` with automatic language detection and translation capabilities.
 *   👥 **Microsoft VibeVoice ASR:** *(New in v2.5.0)* Support for `microsoft/VibeVoice-ASR-HF` allowing unified single-pass transcription, speaker diarization (speaker tracking), and precise timestamp generation.
 *   💾 **Immediate File Saving:** Audio files are saved to disk immediately upon hangup, even while other calls are being transcribed, ensuring zero data loss and faster UI updates.
 *   📦 **Session ZIP Export:** Download complete session packages (WAV + SRT + JSON) directly from the dashboard.

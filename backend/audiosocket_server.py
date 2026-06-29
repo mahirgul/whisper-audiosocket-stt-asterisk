@@ -162,8 +162,8 @@ def load_config(config_path: str) -> dict:
         "ai_min_music_gap": 3.0,
         "silence_frame_ms": 20,
         "force_endian_swap": True,
-        "max_concurrent_connections": 10,
-        "bind_address": "127.0.0.1",
+        "max_concurrent_connections": 100,
+        "bind_address": "0.0.0.0",
         "auto_restart_worker": True,
         "local_whisper_device": "auto",
         "local_whisper_compute_type": "default",
@@ -482,7 +482,7 @@ async def _connection_handler(
             return
 
         with _config_lock:
-            max_conns = _config.get("max_concurrent_connections", 10)
+            max_conns = _config.get("max_concurrent_connections", 100)
 
         with _connections_lock:
             if len(_active_connections) >= max_conns:
@@ -584,8 +584,9 @@ async def _connection_handler(
                         writer.write(silence_frame)
                         await writer.drain()
                         await asyncio.sleep(silence_frame_ms / 1000.0)
-                except (ConnectionResetError, BrokenPipeError, OSError):
-                    connection_alive = False
+                except (ConnectionResetError, BrokenPipeError, OSError) as e:
+                    if debug_enabled:
+                        print(f"[AudioSocket] Send silence failed (Asterisk probably not reading): {e}")
                 except asyncio.CancelledError:
                     pass
 
@@ -954,12 +955,9 @@ async def _read_uuid_frame(reader: asyncio.StreamReader) -> str | None:
     Read frames until we get the UUID frame (type 0x01).
     Returns UUID as a hex string, or None on failure.
     """
-    with _config_lock:
-        ignore_silence = _config.get("ignore_silence_timeout", False)
-        if ignore_silence:
-            timeout_s = None
-        else:
-            timeout_s = _config.get("vad_silence_threshold_ms", 5000) / 1000.0
+    # Use a fixed 5-second timeout for the initial handshake/UUID frame
+    # to avoid holding connections open indefinitely if a client connects but sends nothing.
+    timeout_s = 5.0
 
     for _ in range(10):
         frame_type, payload = await _read_frame(reader, timeout=timeout_s)

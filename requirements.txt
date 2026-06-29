@@ -13,4 +13,5 @@ aiohttp
 aiofiles
 audioop-lts
 transformers
+accelerate
 

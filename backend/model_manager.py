@@ -82,6 +82,8 @@ _engine: str = "openai"
 
 def check_and_restart_worker() -> None:
     global _process, _model_name, _engine
+    if _watchdog_stop_event.is_set():
+        return
     base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     cfg_path = os.path.join(base, "audiosocket.json")
     auto_restart = True
@@ -122,7 +124,8 @@ def check_and_restart_worker() -> None:
 def _watchdog_loop() -> None:
     while not _watchdog_stop_event.is_set():
         try:
-            check_and_restart_worker()
+            if not _watchdog_stop_event.is_set():
+                check_and_restart_worker()
         except Exception as e:
             print(f"[ModelManager-Watchdog] Error in watchdog: {e}")
         _watchdog_stop_event.wait(timeout=5.0)
@@ -198,7 +201,7 @@ def stop() -> None:
 
     if _watchdog_thread is not None and threading.current_thread() != _watchdog_thread:
         _watchdog_stop_event.set()
-        _watchdog_thread.join(timeout=2)
+        # No need to join daemon threads during exit
         _watchdog_thread = None
 
     if _request_queue is not None:
@@ -214,13 +217,13 @@ def stop() -> None:
             pass
 
     if _process is not None:
-        _process.join(timeout=10)
         if _process.is_alive():
-            _process.terminate()
+            _process.terminate()  # Terminate immediately
+            _process.join(timeout=0.2)
         _process = None
 
     if _listener_thread is not None:
-        _listener_thread.join(timeout=2)
+        # No need to join daemon threads during exit
         _listener_thread = None
 
     _request_queue = None
@@ -498,6 +501,10 @@ def _worker_main(
             req_id = request["id"]
             audio_path = request["audio_path"]
             options = request.get("options", {})
+
+            # Remove empty language code to allow Whisper to auto-detect language
+            if "language" in options and not options["language"]:
+                options.pop("language")
 
             resp_q.put(
                 {"type": "status", "status": "processing", "task": "AI..."}

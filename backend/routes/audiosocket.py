@@ -114,16 +114,34 @@ async def as_session_detail(session_uuid: str):
             meta = json.load(f)
     except: pass
     chunks = []
-    files = sorted(os.listdir(session_dir))
-    for fn in files:
-        if fn.startswith("chunk_") and fn.endswith(".wav"):
-            try:
-                parts = fn.split("_")
-                if len(parts) > 1:
-                    idx = int(parts[1].split(".")[0])
-                    chunks.append({"index": idx, "wav": f"/audiosocket-files/{session_uuid}/{fn}"})
-            except (ValueError, IndexError):
-                pass
+    if os.path.exists(session_dir):
+        files = sorted(os.listdir(session_dir))
+        for fn in files:
+            if fn.startswith("chunk_") and fn.endswith(".wav") and not fn.endswith("_l.wav") and not fn.endswith("_r.wav"):
+                try:
+                    parts = fn.split("_")
+                    if len(parts) > 1:
+                        idx_str = parts[1].split(".")[0]
+                        idx = int(idx_str)
+                        chunk_data = {
+                            "index": idx,
+                            "wav": f"/audiosocket-files/{session_uuid}/{fn}"
+                        }
+                        
+                        # Look for matching SRT transcript
+                        srt_name = f"chunk_{idx_str}_orig.srt"
+                        srt_path = os.path.join(session_dir, srt_name)
+                        if os.path.exists(srt_path):
+                            chunk_data["orig_srt"] = f"/audiosocket-files/{session_uuid}/{srt_name}"
+                            try:
+                                with open(srt_path, "r", encoding="utf-8") as srt_f:
+                                    chunk_data["orig_srt_content"] = srt_f.read()
+                            except:
+                                pass
+                        
+                        chunks.append(chunk_data)
+                except (ValueError, IndexError):
+                    pass
     return {"uuid": session_uuid, "meta": meta, "chunks": chunks}
 
 

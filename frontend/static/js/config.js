@@ -150,7 +150,16 @@ function applyConfigToForm(cfg) {
   // New configurations
   setVal("cfgBindAddress",  cfg.bind_address || "127.0.0.1");
   setVal("cfgMaxConnections", cfg.max_concurrent_connections || 10);
-  setChecked("cfgEndianSwap", cfg.force_endian_swap ?? true);
+  
+  let esVal = cfg.force_endian_swap;
+  if (esVal === true || esVal === "true") {
+    setVal("cfgEndianSwap", "true");
+  } else if (esVal === false || esVal === "false") {
+    setVal("cfgEndianSwap", "false");
+  } else {
+    setVal("cfgEndianSwap", "auto");
+  }
+  
   setChecked("cfgAutoRestart", cfg.auto_restart_worker ?? true);
   setVal("cfgWhisperModel", cfg.whisper_model || "medium");
   setVal("cfgWhisperEngine", cfg.whisper_engine || "faster");
@@ -226,7 +235,7 @@ function gatherConfig() {
     // New configurations
     bind_address:             getVal("cfgBindAddress") || "127.0.0.1",
     max_concurrent_connections: parseInt(getVal("cfgMaxConnections")) || 10,
-    force_endian_swap:        getChecked("cfgEndianSwap"),
+    force_endian_swap:        (getVal("cfgEndianSwap") === "true" ? true : (getVal("cfgEndianSwap") === "false" ? false : "auto")),
     auto_restart_worker:      getChecked("cfgAutoRestart"),
     whisper_model:            getVal("cfgWhisperModel") || "medium",
     whisper_engine:           getVal("cfgWhisperEngine") || "faster",

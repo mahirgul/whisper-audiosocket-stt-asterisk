@@ -185,6 +185,24 @@ app.mount("/", StaticFiles(directory=os.path.join(state.BASE_DIR, "frontend"), h
 
 
 if __name__ == "__main__":
+    import signal
+    
+    def force_exit_handler(sig, frame):
+        print("\n[WASA] Ctrl+C received. Exiting immediately...")
+        try:
+            as_srv.stop_server()
+            as_srv.shutdown_worker()
+            model_manager.stop()
+        except Exception:
+            pass
+        os._exit(0)
+        
+    signal.signal(signal.SIGINT, force_exit_handler)
+    try:
+        signal.signal(signal.SIGTERM, force_exit_handler)
+    except Exception:
+        pass
+
     # Load configuration defaults for web server host/port
     web_host = "0.0.0.0"
     web_port = 8000
@@ -202,4 +220,13 @@ if __name__ == "__main__":
     port = args.port if args.port is not None else web_port
 
     import uvicorn
-    uvicorn.run(app, host=host, port=port, access_log=False)
+    import contextlib
+
+    class SafeServer(uvicorn.Server):
+        @contextlib.contextmanager
+        def capture_signals(self):
+            yield
+
+    config = uvicorn.Config(app, host=host, port=port, access_log=False)
+    server = SafeServer(config)
+    server.run()

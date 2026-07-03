@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey?style=for-the-badge" alt="Windows & Linux">
 </p>
 
-> **⚠️ DISCLAIMER:** This is a demonstration/example project only and is not intended for production use without further security and performance hardening.
+> **🔬 EXPERIMENTAL PROJECT:** This is an experimental research and development project, created as a joint collaborative effort by **Antigravity (Advanced AI Coding Assistant)**, **DeepSeek**, and **Gemini**. It is not intended for production environments without thorough security audits and performance hardening.
 
 An AI-powered stereo audio processing tool that transcribes telephony voice streams with independent channel control. Features real-time **Asterisk AudioSocket** integration for live transcription.
 
@@ -52,6 +52,44 @@ WASA acts as a high-performance TCP server for the Asterisk AudioSocket protocol
 3.  **Buffering:** During the call, raw PCM bytes are collected and stored in RAM.
 4.  **Immediate WAV Export:** Once the call hangs up, the buffered audio is converted to a WAV file immediately.
 5.  **Transcription:** The dedicated Model Worker process picks up the job, performs the transcription (and optional translation), and saves the results as JSON and SRT files.
+
+### 🔌 Asterisk Dialplan Integration Examples
+
+You can stream audio from Asterisk to WASA using the standard `app_audiosocket` module. Every AudioSocket connection requires a valid **16-byte UUID representation** (e.g. generated via Asterisk's `UUID()` function) to identify the session.
+
+#### 1. Direct Dialplan Application
+Ideal for voice menus, voicebots, or direct voicemail transcription where the caller is piped directly to the AI socket:
+
+```asterisk
+[my-direct-stt-context]
+exten => 500,1,Answer()
+  same => n,Set(MY_UUID=${UUID()})
+  ; Streams call audio directly to WASA AudioSocket Server
+  same => n,AudioSocket(${MY_UUID},192.168.100.155:9092)
+  same => n,Hangup()
+```
+
+#### 2. Spying on an Active Channel (ChanSpy + AudioHook)
+To transcribe an active call between two users (e.g. PJSIP/2001 and PJSIP/3001) in the background without affecting their audio path, use Asterisk's `ChanSpy` application redirecting to an AudioSocket loop:
+
+```asterisk
+[my-chanspy-context]
+; Trigger a background spy session on a target endpoint (e.g. exten spyPJSIP*2001)
+exten => _spyPJSIP*,1,Answer()
+  same => n,Set(TARGET_CHAN=PJSIP/${EXTEN:9})
+  
+  ; Quietly (q) taps both directions of the audio (B) 
+  ; and routes it to the start_socket exten in audio_hook_context
+  same => n,ChanSpy(${TARGET_CHAN},qB(audio_hook_context^start_socket^1))
+  same => n,Hangup()
+
+[audio_hook_context]
+exten => start_socket,1,Answer()
+  same => n,Set(MY_UUID=${UUID()})
+  same => n,AudioSocket(${MY_UUID},192.168.100.155:9092)
+  same => n,Hangup()
+```
+*(Make sure to replace `192.168.100.155:9092` with the actual IP address and port of your WASA server).*
 
 ---
 
@@ -115,14 +153,15 @@ You can manage all settings via the **Config** tab in the Web UI. Key settings i
 
 ---
 
-## 🤖 Gemini's Contribution
+## 🤖 Collaborative AI Development (Antigravity, DeepSeek & Gemini)
 
-This project has been updated and optimized by **Gemini CLI**. Key Gemini-driven enhancements include:
-*   Implemented **Ignore Silence Timeout** feature.
-*   Integrated **Microsoft VibeVoice ASR-HF** model supporting native speaker tracking.
-*   Refactored the **AudioSocket reader** for better EOF vs. Timeout handling.
-*   Localized the **UI and Configuration** system to English.
-*   Validated the architecture for **concurrency and data isolation**.
+WASA is a collaborative project developed, optimized, and maintained through the joint efforts of **Antigravity**, **DeepSeek**, and **Gemini**:
+*   **Antigravity:** Refactored the exit lifecycle (immediate SIGINT/Ctrl+C exit with no worker restarts), fixed multi-threading scope bugs, and designed statistical byte-swapping auto-detection to eliminate static/noise dynamically.
+*   **DeepSeek:** Assisted in logical structuring and code quality audits.
+*   **Gemini:** Developed initial features such as Microsoft VibeVoice integration, ignore silence timeouts, SSE streaming, and overall localization of configuration and UI.
+
+> [!NOTE]
+> This repository remains experimental, serving as a playground for real-time Asterisk AudioSocket AI integrations.
 
 ---
 
@@ -130,4 +169,4 @@ This project has been updated and optimized by **Gemini CLI**. Key Gemini-driven
 
 Distributed under the MIT License. See [LICENSE](file:///C:/whisper-audiosocket-stt-asterisk/LICENSE) for more information.
 
-*Developed by [mhrgl.com](https://mhrgl.com) & Enhanced by Gemini AI.*
+*Developed by [mhrgl.com](https://mhrgl.com) & built collaboratively by Antigravity, DeepSeek, and Gemini.*

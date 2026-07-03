@@ -161,7 +161,7 @@ def load_config(config_path: str) -> dict:
         "ai_no_speech_threshold": 0.6,
         "ai_min_music_gap": 3.0,
         "silence_frame_ms": 20,
-        "force_endian_swap": True,
+        "force_endian_swap": "auto",
         "max_concurrent_connections": 100,
         "bind_address": "0.0.0.0",
         "auto_restart_worker": True,
@@ -263,7 +263,7 @@ def stop_server() -> None:
         try:
             # Cancel all tasks in the AS loop and close the server
             asyncio.run_coroutine_threadsafe(_stop_tcp_force(), _loop).result(
-                timeout=5
+                timeout=0.2
             )
         except Exception:
             pass
@@ -272,7 +272,8 @@ def stop_server() -> None:
         _loop.call_soon_threadsafe(_loop.stop)
 
     if _thread is not None:
-        _thread.join(timeout=2)
+        # No need to join daemon threads during exit
+        _thread = None
 
     _server = None
     _thread = None
@@ -285,7 +286,7 @@ def shutdown_worker() -> None:
     if _processing_worker_thread and _processing_worker_thread.is_alive():
         print("[AudioSocket] Shutting down session worker...")
         _processing_queue.put(None)
-        _processing_worker_thread.join(timeout=2)
+        # No need to join daemon threads during exit
     _processing_worker_thread = None
 
 
@@ -546,7 +547,7 @@ async def _connection_handler(
             sample_rate = cfg.get("input_sample_rate", 8000)
             channels = cfg.get("input_channels", 1)
             sample_width = cfg.get("input_sample_width", 2)
-            do_swap = cfg.get("force_endian_swap", True)
+            do_swap_config = cfg.get("force_endian_swap", "auto")
             debug_enabled = cfg.get("debug_mode", False)
             rms_threshold = cfg.get("vad_rms_threshold", 300)
             ignore_silence = cfg.get("ignore_silence_timeout", False)
@@ -557,6 +558,14 @@ async def _connection_handler(
                 silence_timeout_s = (
                     cfg.get("vad_silence_threshold_ms", 5000) / 1000.0
                 )
+
+        # Endianness auto-detection state
+        do_swap = False
+        if isinstance(do_swap_config, bool):
+            do_swap = do_swap_config
+            auto_detect_done = True
+        else:
+            auto_detect_done = False
 
         # Online Transcription State
         online_buf = bytearray()
@@ -593,7 +602,7 @@ async def _connection_handler(
             silence_task = asyncio.create_task(_send_silence())
 
         async def _read_audio():
-            nonlocal connection_alive, total_bytes_received
+            nonlocal connection_alive, total_bytes_received, auto_detect_done, do_swap
             if debug_enabled:
                 print(
                     f"[AudioSocket] Audio reader task started "
@@ -640,7 +649,35 @@ async def _connection_handler(
                         total_bytes_received += len(payload)
                         stats["total_bytes"] = total_bytes_received
 
-                        # Swap to little-endian if requested
+                        # Perform auto-detection on non-silent audio frames if needed
+                        if not auto_detect_done and len(payload) >= 40:
+                            try:
+                                import numpy as np
+                                data_le = np.frombuffer(payload, dtype='<i2')
+                                data_be = np.frombuffer(payload, dtype='>i2')
+                                diff_le = np.mean(np.abs(np.diff(data_le)))
+                                diff_be = np.mean(np.abs(np.diff(data_be)))
+                                
+                                # Check if there is enough signal to distinguish (avoid pure silence)
+                                if diff_le > 5.0 or diff_be > 5.0:
+                                    if diff_be < diff_le * 0.2:
+                                        do_swap = True
+                                        print(f"[AudioSocket] Auto-detected Big-Endian stream for session {session_id[:8]}. Swapping enabled.")
+                                    else:
+                                        do_swap = False
+                                        print(f"[AudioSocket] Auto-detected Little-Endian stream for session {session_id[:8]}. Swapping disabled.")
+                                    auto_detect_done = True
+                                elif stats["audio_frames"] > 30:
+                                    # Fallback if the call is completely silent for the first 600ms
+                                    do_swap = False
+                                    print(f"[AudioSocket] Endianness auto-detection timeout (silence). Defaulting to Little-Endian.")
+                                    auto_detect_done = True
+                            except Exception as ex:
+                                print(f"[AudioSocket] Endianness auto-detection failed: {ex}")
+                                do_swap = False
+                                auto_detect_done = True
+
+                        # Swap to little-endian if resolved
                         if do_swap:
                             payload = _swap_pcm16_endian(payload)
 

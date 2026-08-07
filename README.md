@@ -9,7 +9,11 @@
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey?style=for-the-badge" alt="Windows & Linux">
 </p>
 
-> **🔬 EXPERIMENTAL PROJECT:** This is an experimental research and development project, created as a joint collaborative effort by **Antigravity (Advanced AI Coding Assistant)**, **DeepSeek**, and **Gemini**. It is not intended for production environments without thorough security audits and performance hardening.
+> 🤖 **AI-DEVELOPED PROJECT & DISCLAIMER / YAPAY ZEKÂ İLE GELİŞTİRİLMİŞ PROJE:**
+> This is an experimental software project developed, engineered, and maintained using Artificial Intelligence (AI) models (**Antigravity**, **DeepSeek**, and **Gemini**).
+> 
+> ⚖️ **MIT License & Disclaimer of Liability (Sorumluluk Reddi):**
+> Distributed under the open-source **MIT License**. This software is provided *"AS IS"*, WITHOUT WARRANTY OF ANY KIND. The authors, maintainers, and AI developers **ACCEPT NO RESPONSIBILITY OR LIABILITY** (hiçbir sorumluluk kabul edilmemektedir) for any direct or indirect damages, data loss, performance issues, security vulnerabilities, or operational failures arising from the use of this project. Use at your own risk.
 
 An AI-powered stereo audio processing tool that transcribes telephony voice streams with independent channel control. Features real-time **Asterisk AudioSocket** integration for live transcription.
 
@@ -175,8 +179,18 @@ WASA is a collaborative project developed, optimized, and maintained through the
 
 ---
 
-## ⚖️ License
+## ⚖️ License & Liability Disclaimer (Lisans ve Sorumluluk Reddi)
 
-Distributed under the MIT License. See [LICENSE](file:///C:/whisper-audiosocket-stt-asterisk/LICENSE) for more information.
+This project is distributed under the **MIT License**. See the [LICENSE](LICENSE) file for complete details.
 
-*Developed by [mhrgl.com](https://mhrgl.com) & built collaboratively by Antigravity, DeepSeek, and Gemini.*
+> [!CAUTION]
+> ### ⚠️ Disclaimer of Liability / Sorumluluk Reddi
+> * **AI-Generated / AI-Developed Code:** This codebase was generated and refined with the assistance of Artificial Intelligence (AI) engines.
+> * **No Warranty & Zero Liability:** THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+> * **No Responsibility Assumed:** IN NO EVENT SHALL THE AUTHORS, COPYRIGHT HOLDERS, OR AI CONTRIBUTORS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+> * **Kullanım ve Sorumluluk:** Bu yazılımın kullanımından doğabilecek hiçbir doğrudan veya dolaylı zarardan, veri kaybından veya sistem aksaklığından geliştiriciler ve AI katkıcıları **sorumlu tutulamaz (sorumluluk kabul edilmemektedir)**.
+
+---
+
+*Developed by [mhrgl.com](https://mhrgl.com) & built collaboratively by AI (Antigravity, DeepSeek, Gemini).*
+

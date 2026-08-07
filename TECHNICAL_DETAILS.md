@@ -1,6 +1,8 @@
 # WASA — Technical Documentation & Usage Guide
 
-> **⚠️ DISCLAMER:** This project is a demonstration/example for integration purposes. Hardening is required for production environments.
+> 🤖 **AI-DEVELOPED PROJECT NOTICE & DISCLAIMER (Sorumluluk Reddi):** 
+> This project is engineered and developed using Artificial Intelligence (AI) models. It is released under the **MIT License**.
+> Software is provided "AS IS" without warranty of any kind. Authors, maintainers, and AI contributors accept **NO LIABILITY OR RESPONSIBILITY** (hiçbir sorumluluk kabul edilmemektedir) for any operational failures, data loss, or consequences arising from its usage.
 
 ---
 
@@ -71,4 +73,13 @@ WASA uses a sophisticated RMS-based VAD system to manage connections:
 *   **Port Conflicts:** If port 8000 (Web) or 9092 (AudioSocket) is in use, the application will attempt to clear them or report an error.
 
 ---
-*Developed for demonstration by [mhrgl.com](https://mhrgl.com) — Powered by Gemini AI.*
+
+## ⚖️ License & Responsibility Disclaimer
+
+* **License:** Released under the open-source **MIT License**.
+* **AI-Developed Project:** Developed, engineered, and maintained using Artificial Intelligence (AI) models (Antigravity, DeepSeek, Gemini).
+* **Liability Disclaimer (Sorumluluk Reddi):** The authors and AI contributors accept **no responsibility or liability** for software errors, data loss, security vulnerabilities, or operational issues resulting from the implementation of this project. Use entirely at your own risk.
+
+---
+*Developed for demonstration by [mhrgl.com](https://mhrgl.com) — Built collaboratively by AI.*
+

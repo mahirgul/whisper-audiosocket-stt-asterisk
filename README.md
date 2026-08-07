@@ -9,15 +9,27 @@
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey?style=for-the-badge" alt="Windows & Linux">
 </p>
 
-> 🤖 **AI-DEVELOPED PROJECT & DISCLAIMER / YAPAY ZEKÂ İLE GELİŞTİRİLMİŞ PROJE:**
-> This is an experimental software project developed, engineered, and maintained using Artificial Intelligence (AI) models (**Antigravity**, **DeepSeek**, and **Gemini**).
+> 🤖 **AI-DEVELOPED PROJECT NOTICE & DISCLAIMER:**
+> This software project was engineered and developed using Artificial Intelligence (AI) models (**Antigravity**, **DeepSeek**, and **Gemini**).
 > 
-> ⚖️ **MIT License & Disclaimer of Liability (Sorumluluk Reddi):**
-> Distributed under the open-source **MIT License**. This software is provided *"AS IS"*, WITHOUT WARRANTY OF ANY KIND. The authors, maintainers, and AI developers **ACCEPT NO RESPONSIBILITY OR LIABILITY** (hiçbir sorumluluk kabul edilmemektedir) for any direct or indirect damages, data loss, performance issues, security vulnerabilities, or operational failures arising from the use of this project. Use at your own risk.
+> ⚖️ **MIT License & Disclaimer of Liability:**
+> Distributed under the open-source **MIT License**. This software is provided *"AS IS"*, WITHOUT WARRANTY OF ANY KIND. The authors, maintainers, and AI developers **ACCEPT NO RESPONSIBILITY OR LIABILITY** for any direct or indirect damages, data loss, performance issues, security vulnerabilities, or operational failures arising from the use of this project. Use at your own risk.
 
 An AI-powered stereo audio processing tool that transcribes telephony voice streams with independent channel control. Features real-time **Asterisk AudioSocket** integration for live transcription.
 
 WASA features a high-performance **Multi-Process Architecture**, offloading heavy AI inference to a dedicated worker process to ensure the web UI and real-time sockets remain responsive even under heavy call volume.
+
+---
+
+## ⚖️ License & Legal Disclaimer
+
+This project is distributed under the open-source **MIT License**. See the [LICENSE](LICENSE) file for details.
+
+> [!CAUTION]
+> ### ⚠️ Disclaimer of Liability & Limitation of Responsibility
+> * **AI-Developed Codebase:** This project was entirely designed, implemented, and optimized using Artificial Intelligence (AI) models.
+> * **No Warranty:** THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+> * **Zero Liability:** IN NO EVENT SHALL THE AUTHORS, COPYRIGHT HOLDERS, OR AI CONTRIBUTORS BE LIABLE FOR ANY CLAIM, DAMAGES, SYSTEM FAILURES, DATA LOSS, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. USE ENTIRELY AT YOUR OWN RISK.
 
 ---
 
@@ -176,19 +188,6 @@ WASA is a collaborative project developed, optimized, and maintained through the
 
 > [!NOTE]
 > This repository remains experimental, serving as a playground for real-time Asterisk AudioSocket AI integrations.
-
----
-
-## ⚖️ License & Liability Disclaimer (Lisans ve Sorumluluk Reddi)
-
-This project is distributed under the **MIT License**. See the [LICENSE](LICENSE) file for complete details.
-
-> [!CAUTION]
-> ### ⚠️ Disclaimer of Liability / Sorumluluk Reddi
-> * **AI-Generated / AI-Developed Code:** This codebase was generated and refined with the assistance of Artificial Intelligence (AI) engines.
-> * **No Warranty & Zero Liability:** THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
-> * **No Responsibility Assumed:** IN NO EVENT SHALL THE AUTHORS, COPYRIGHT HOLDERS, OR AI CONTRIBUTORS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-> * **Kullanım ve Sorumluluk:** Bu yazılımın kullanımından doğabilecek hiçbir doğrudan veya dolaylı zarardan, veri kaybından veya sistem aksaklığından geliştiriciler ve AI katkıcıları **sorumlu tutulamaz (sorumluluk kabul edilmemektedir)**.
 
 ---
 

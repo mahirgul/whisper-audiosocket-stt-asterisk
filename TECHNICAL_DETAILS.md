@@ -1,8 +1,16 @@
 # WASA — Technical Documentation & Usage Guide
 
-> 🤖 **AI-DEVELOPED PROJECT NOTICE & DISCLAIMER (Sorumluluk Reddi):** 
-> This project is engineered and developed using Artificial Intelligence (AI) models. It is released under the **MIT License**.
-> Software is provided "AS IS" without warranty of any kind. Authors, maintainers, and AI contributors accept **NO LIABILITY OR RESPONSIBILITY** (hiçbir sorumluluk kabul edilmemektedir) for any operational failures, data loss, or consequences arising from its usage.
+> 🤖 **AI-DEVELOPED PROJECT NOTICE & LEGAL DISCLAIMER:** 
+> This project was engineered and developed using Artificial Intelligence (AI) models. It is released under the **MIT License**.
+> Software is provided "AS IS" without warranty of any kind. Authors, maintainers, and AI contributors accept **NO LIABILITY OR RESPONSIBILITY** for any operational failures, data loss, or consequences arising from its usage. Use at your own risk.
+
+---
+
+## ⚖️ License & Legal Disclaimer
+
+* **License:** Released under the open-source **MIT License**.
+* **AI-Developed Project:** Designed, engineered, and maintained using Artificial Intelligence (AI) models (Antigravity, DeepSeek, Gemini).
+* **Liability Disclaimer:** The authors and AI contributors accept **no responsibility or liability** for software errors, data loss, security vulnerabilities, or operational issues resulting from the implementation of this project. Use entirely at your own risk.
 
 ---
 
@@ -71,14 +79,6 @@ WASA uses a sophisticated RMS-based VAD system to manage connections:
 *   **Delay in Transcription:** Transcription starts only after the call hangs up. If the audio is long, it may take a few seconds to appear in the dashboard.
 *   **GPU not used:** Ensure you have `NVIDIA Drivers` and `CUDA Toolkit` installed. The system will fallback to CPU if CUDA is not detected.
 *   **Port Conflicts:** If port 8000 (Web) or 9092 (AudioSocket) is in use, the application will attempt to clear them or report an error.
-
----
-
-## ⚖️ License & Responsibility Disclaimer
-
-* **License:** Released under the open-source **MIT License**.
-* **AI-Developed Project:** Developed, engineered, and maintained using Artificial Intelligence (AI) models (Antigravity, DeepSeek, Gemini).
-* **Liability Disclaimer (Sorumluluk Reddi):** The authors and AI contributors accept **no responsibility or liability** for software errors, data loss, security vulnerabilities, or operational issues resulting from the implementation of this project. Use entirely at your own risk.
 
 ---
 *Developed for demonstration by [mhrgl.com](https://mhrgl.com) — Built collaboratively by AI.*

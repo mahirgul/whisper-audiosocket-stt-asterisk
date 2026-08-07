@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WASA — Whisper AudioSocket Asterisk | Real-Time AI Telephony Engine</title>
+  <meta name="description" content="WASA (Whisper AudioSocket Asterisk) is a high-performance multi-process AI telephony engine transcribing live Asterisk PBX AudioSocket streams with Whisper and Microsoft VibeVoice ASR.">
+  <meta name="keywords" content="Asterisk, AudioSocket, Whisper, Faster-Whisper, VibeVoice, Telephony, Speech to Text, STT, AI, Diarization, PyTorch, FastAPI">
+  
+  <!-- Google Fonts & Lucide Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/x-icon" href="../frontend/favicon.ico">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <div class="container nav-container">
+      <a href="#" class="nav-brand">
+        <div class="nav-logo-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" x2="12" y1="19" y2="22"/>
+          </svg>
+        </div>
+        <span>WASA <span style="font-size: 0.75rem; color: var(--primary-glow); background: rgba(99,102,241,0.15); padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(99,102,241,0.3);">v2.5.2</span></span>
+      </a>
+
+      <ul class="nav-links">
+        <li><a href="#simulator" class="nav-link">Live Simulator</a></li>
+        <li><a href="#features" class="nav-link">Features</a></li>
+        <li><a href="#architecture" class="nav-link">Architecture</a></li>
+        <li><a href="#dialplan" class="nav-link">Asterisk Integration</a></li>
+        <li><a href="#models" class="nav-link">AI Models</a></li>
+        <li><a href="#installation" class="nav-link">Installation</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <a href="https://github.com/mahirgul/whisper-audiosocket-stt-asterisk" target="_blank" class="btn btn-secondary btn-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+          GitHub Repo
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge-container">
+        <div class="hero-pill">
+          <span class="dot"></span>
+          Real-Time Asterisk Telephony AI
+        </div>
+        <span class="badge badge-purple">Faster-Whisper</span>
+        <span class="badge badge-cyan">Microsoft VibeVoice ASR</span>
+        <span class="badge badge-emerald">Multi-Process Architecture</span>
+      </div>
+
+      <h1 class="hero-title">
+        High-Performance Asterisk STT<br>
+        <span class="hero-title-gradient">Powered by Whisper & VibeVoice</span>
+      </h1>
+
+      <p class="hero-subtitle">
+        WASA (Whisper AudioSocket Asterisk) bridges your Asterisk PBX phone system directly to cutting-edge AI models. Transcribe, translate, and perform single-pass speaker diarization on live phone streams over AudioSocket TCP.
+      </p>
+
+      <div class="hero-cta">
+        <a href="#simulator" class="btn btn-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+          Try Live Simulator
+        </a>
+        <a href="#dialplan" class="btn btn-secondary">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg>
+          Get Asterisk Dialplan
+        </a>
+      </div>
+
+      <!-- Hero Stats Bar -->
+      <div class="hero-stats">
+        <div class="stat-card">
+          <div class="stat-value cyan">0ms</div>
+          <div class="stat-label">UI Blocking (Decoupled Worker)</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value purple">5-10x</div>
+          <div class="stat-label">CUDA GPU Speedup</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value emerald">100%</div>
+          <div class="stat-label">Zero-Data-Loss Disk Flushing</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">9092</div>
+          <div class="stat-label">Default AudioSocket TCP Port</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Telephony Simulator Section -->
+  <section id="simulator">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Interactive Demo</span>
+        <h2 class="section-title">Live AudioSocket Pipeline Simulator</h2>
+        <p class="section-desc">Experience how WASA receives raw linear PCM frames over Asterisk AudioSocket, flushes audio to disk instantly on hangup, and queues AI transcription jobs without lagging.</p>
+      </div>
+
+      <div class="simulator-box">
+        <div class="simulator-header">
+          <div class="simulator-title">
+            <span class="status-dot" id="sim-status-dot"></span>
+            <span>SYSTEM STATUS: <strong id="sim-status-text" style="color: var(--cyan);">IDLE</strong></span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <label for="sim-engine" style="font-size: 0.85rem; color: var(--text-muted);">Selected AI Engine:</label>
+            <select id="sim-engine" class="form-select" style="padding: 4px 10px; font-size: 0.825rem;">
+              <option value="vibevoice">Microsoft VibeVoice ASR (Diarization + Timestamps)</option>
+              <option value="faster">Faster-Whisper (Turbo / Base)</option>
+              <option value="openai">OpenAI Whisper (Standard PyTorch)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="simulator-body">
+          <div class="sim-panel">
+            <div class="sim-panel-title">
+              <span>Incoming Asterisk AudioSocket Stream</span>
+              <span class="badge badge-cyan">Port 9092 TCP</span>
+            </div>
+
+            <!-- Wave Visualizer -->
+            <div class="wave-visualizer" id="sim-wave">
+              <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+              <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+              <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+              <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+              <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+            </div>
+
+            <button id="sim-start-btn" class="btn btn-cyan" style="width: 100%;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+              Run Telephony Test Call
+            </button>
+          </div>
+
+          <div class="sim-panel">
+            <div class="sim-panel-title">
+              <span>Live Console Log & Output</span>
+              <span class="badge badge-purple">Real-Time</span>
+            </div>
+
+            <div class="sim-console" id="sim-console">
+              <div class="sim-console-line info"><span class="ts">[System]</span> Ready for incoming AudioSocket TCP call connection...</div>
+              <div class="sim-console-line info"><span class="ts">[System]</span> Click "Run Telephony Test Call" above to simulate Asterisk stream.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Key Features Grid -->
+  <section id="features">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Core Capabilities</span>
+        <h2 class="section-title">Engineered for Telephony Performance</h2>
+        <p class="section-desc">Designed from the ground up for high concurrency, isolated AI inference, and immediate recording preservation.</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M2 8c0-2.2 1.8-4 4-4"/><path d="M22 8c0-2.2-1.8-4-4-4"/></svg>
+          </div>
+          <h3 class="feature-title">Multi-Process AI Worker</h3>
+          <p class="feature-desc">Offloads heavy PyTorch / CTranslate2 model loading into a dedicated OS process. The FastAPI dashboard and AudioSocket TCP server remain 100% responsive under call surges.</p>
+        </div>
+
+        <div class="feature-card cyan">
+          <div class="feature-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h3 class="feature-title">Microsoft VibeVoice ASR</h3>
+          <p class="feature-desc">Single-pass speaker diarization and timestamping powered by <code>microsoft/VibeVoice-ASR-HF</code>. Tracks distinct callers automatically without requiring external diarization pipelines.</p>
+        </div>
+
+        <div class="feature-card purple">
+          <div class="feature-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+          </div>
+          <h3 class="feature-title">Immediate WAV Export</h3>
+          <p class="feature-desc">Flushes incoming linear PCM memory buffers directly to <code>.wav</code> files upon call hangup. Guarantees zero data loss even if the AI model worker is busy processing prior queued calls.</p>
+        </div>
+
+        <div class="feature-card emerald">
+          <div class="feature-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
+          </div>
+          <h3 class="feature-title">Dual Whisper Engine Support</h3>
+          <p class="feature-desc">Switch seamlessly between <strong>Faster-Whisper</strong> (CTranslate2, optimal speed) and <strong>OpenAI Whisper</strong> (Standard PyTorch) across all model sizes: <code>tiny</code>, <code>base</code>, <code>small</code>, <code>medium</code>, <code>large-v3</code>, and <code>turbo</code>.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+          </div>
+          <h3 class="feature-title">REST Webhook Delivery</h3>
+          <p class="feature-desc">Automatically post complete session packages (WAV audio + SRT subtitles + JSON metadata) to any remote API endpoint upon transcription completion.</p>
+        </div>
+
+        <div class="feature-card cyan">
+          <div class="feature-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="m4.93 10.93 2.83-2.83"/><path d="M2 18h4"/><path d="m20 18-4 0"/><path d="m19.07 10.93-2.83-2.83"/><circle cx="12" cy="18" r="4"/></svg>
+          </div>
+          <h3 class="feature-title">Live Dynamic Hot-Reload</h3>
+          <p class="feature-desc">Update VAD silence thresholds, AI parameters, or model engines through the dashboard without shutting down or restarting the running Asterisk AudioSocket server.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- System Architecture Explorer -->
+  <section id="architecture">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Internal Engineering</span>
+        <h2 class="section-title">Decoupled AudioSocket Data Flow</h2>
+        <p class="section-desc">How WASA safely handles concurrency, memory buffering, disk persistence, and AI inference.</p>
+      </div>
+
+      <div class="arch-diagram">
+        <div class="arch-node">
+          <div class="arch-step-num">1</div>
+          <h4 class="arch-node-title">Asterisk PBX</h4>
+          <p class="arch-node-desc">Streams call audio using <code>AudioSocket()</code> or <code>ChanSpy()</code> over TCP port 9092.</p>
+        </div>
+
+        <div class="arch-node">
+          <div class="arch-step-num">2</div>
+          <h4 class="arch-node-title">Async TCP Listener</h4>
+          <p class="arch-node-desc">Handles UUID (0x01), Audio (0x10), and Hangup (0x00) frames with zero audio mixing.</p>
+        </div>
+
+        <div class="arch-node">
+          <div class="arch-step-num">3</div>
+          <h4 class="arch-node-title">Immediate WAV Export</h4>
+          <p class="arch-node-desc"> Flushes PCM buffer to disk immediately upon hangup, guaranteeing file safety.</p>
+        </div>
+
+        <div class="arch-node">
+          <div class="arch-step-num">4</div>
+          <h4 class="arch-node-title">AI Model Worker</h4>
+          <p class="arch-node-desc">Isolated process executes Faster-Whisper or VibeVoice on GPU/CPU.</p>
+        </div>
+
+        <div class="arch-node">
+          <div class="arch-step-num">5</div>
+          <h4 class="arch-node-title">Web UI & Webhook</h4>
+          <p class="arch-node-desc">Outputs SRT, JSON metadata, ZIP downloads, and pushes REST Webhook payloads.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Asterisk Dialplan Customizer -->
+  <section id="dialplan">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Integration Guide</span>
+        <h2 class="section-title">Asterisk Dialplan Generator</h2>
+        <p class="section-desc">Customize your Asterisk server IP and AudioSocket port to automatically generate copy-pasteable configuration for <code>/etc/asterisk/extensions.conf</code>.</p>
+      </div>
+
+      <div class="dialplan-container">
+        <div class="dialplan-controls">
+          <div class="form-group">
+            <label class="form-label" for="ast-ip">WASA Server IP Address</label>
+            <input type="text" id="ast-ip" class="form-input" value="192.168.100.155" placeholder="e.g. 192.168.1.100">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="ast-port">AudioSocket TCP Port</label>
+            <input type="text" id="ast-port" class="form-input" value="9092" placeholder="9092">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="ast-chan">Target Channel for ChanSpy</label>
+            <input type="text" id="ast-chan" class="form-input" value="PJSIP/2001" placeholder="PJSIP/2001">
+          </div>
+        </div>
+
+        <div>
+          <!-- Tab Navigation for Code Snippets -->
+          <div class="tab-header">
+            <button class="tab-btn active" data-tab-group="dialplan" data-tab-target="tab-direct">1. Direct AudioSocket</button>
+            <button class="tab-btn" data-tab-group="dialplan" data-tab-target="tab-chanspy">2. ChanSpy Background Hook</button>
+          </div>
+
+          <!-- Direct Code Tab -->
+          <div id="tab-direct" class="tab-content active" data-tab-group="dialplan">
+            <div class="code-block-wrapper">
+              <div class="code-block-header">
+                <span>extensions.conf (Direct Interactive Call / Voicebot)</span>
+                <button class="copy-btn" onclick="copyToClipboard('code-direct', this)">📋 Copy Code</button>
+              </div>
+              <pre><code id="code-direct"></code></pre>
+            </div>
+          </div>
+
+          <!-- ChanSpy Code Tab -->
+          <div id="tab-chanspy" class="tab-content" data-tab-group="dialplan">
+            <div class="code-block-wrapper">
+              <div class="code-block-header">
+                <span>extensions.conf (Silent Live Call Monitoring)</span>
+                <button class="copy-btn" onclick="copyToClipboard('code-chanspy', this)">📋 Copy Code</button>
+              </div>
+              <pre><code id="code-chanspy"></code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AI Model Matrix -->
+  <section id="models">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">AI Engines</span>
+        <h2 class="section-title">Model Capabilities & Comparison</h2>
+        <p class="section-desc">Select the ideal STT engine based on your accuracy, speed, speaker tracking, and hardware requirements.</p>
+      </div>
+
+      <div class="models-table-wrapper">
+        <table class="models-table">
+          <thead>
+            <tr>
+              <th>Engine / Model</th>
+              <th>Backend</th>
+              <th>Diarization</th>
+              <th>Speed Rank</th>
+              <th>Min VRAM / RAM</th>
+              <th>Recommended Use Case</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong style="color: var(--cyan);">Microsoft VibeVoice ASR</strong></td>
+              <td>HuggingFace Transformers</td>
+              <td><span class="badge badge-emerald">Native Single-Pass</span></td>
+              <td>⚡⚡⚡ High</td>
+              <td>~4 GB VRAM</td>
+              <td>Multi-speaker phone calls, call center agent analytics</td>
+            </tr>
+            <tr>
+              <td><strong>Faster-Whisper (Turbo)</strong></td>
+              <td>CTranslate2 C++ Engine</td>
+              <td>External SRT</td>
+              <td>⚡⚡⚡⚡⚡ Ultra Fast</td>
+              <td>~2 GB VRAM</td>
+              <td>Near real-time high volume transcription</td>
+            </tr>
+            <tr>
+              <td><strong>Faster-Whisper (Base / Medium)</strong></td>
+              <td>CTranslate2 C++ Engine</td>
+              <td>External SRT</td>
+              <td>⚡⚡⚡⚡ Fast</td>
+              <td>1 - 3 GB VRAM</td>
+              <td>General telephony voicemail & commands</td>
+            </tr>
+            <tr>
+              <td><strong>Faster-Whisper (Large-v3)</strong></td>
+              <td>CTranslate2 C++ Engine</td>
+              <td>External SRT</td>
+              <td>⚡⚡ Moderate</td>
+              <td>~6 GB VRAM</td>
+              <td>Maximum multi-lingual accuracy & translation</td>
+            </tr>
+            <tr>
+              <td><strong>OpenAI Whisper (PyTorch)</strong></td>
+              <td>Standard PyTorch</td>
+              <td>External SRT</td>
+              <td>⚡ Moderate</td>
+              <td>2 - 10 GB VRAM</td>
+              <td>Standard compliance & benchmark parity</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Installation Section -->
+  <section id="installation">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Deployment</span>
+        <h2 class="section-title">Quick Installation</h2>
+        <p class="section-desc">Get WASA running on Windows or Linux in minutes using the provided automated scripts.</p>
+      </div>
+
+      <div class="glass-card" style="max-width: 850px; margin: 0 auto;">
+        <div class="tab-header">
+          <button class="tab-btn active" data-tab-group="install" data-tab-target="install-win">🪟 Windows Setup</button>
+          <button class="tab-btn" data-tab-group="install" data-tab-target="install-linux">🐧 Linux Setup (Ubuntu/Debian)</button>
+        </div>
+
+        <div id="install-win" class="tab-content active" data-tab-group="install">
+          <p style="margin-bottom: 12px; color: var(--text-muted);">1. Clone repository and run automated environment setup script:</p>
+          <div class="code-block-wrapper" style="margin-bottom: 20px;">
+            <div class="code-block-header">
+              <span>PowerShell / CMD</span>
+              <button class="copy-btn" onclick="copyToClipboard('code-install-win', this)">📋 Copy</button>
+            </div>
+            <pre><code id="code-install-win">git clone https://github.com/mahirgul/whisper-audiosocket-stt-asterisk.git
+cd whisper-audiosocket-stt-asterisk
+install.bat</code></pre>
+          </div>
+
+          <p style="margin-bottom: 12px; color: var(--text-muted);">2. Launch Web Dashboard & AudioSocket TCP Server:</p>
+          <div class="code-block-wrapper">
+            <div class="code-block-header">
+              <span>Launch Command</span>
+              <button class="copy-btn" onclick="copyToClipboard('code-run-win', this)">📋 Copy</button>
+            </div>
+            <pre><code id="code-run-win">run.bat</code></pre>
+          </div>
+        </div>
+
+        <div id="install-linux" class="tab-content" data-tab-group="install">
+          <p style="margin-bottom: 12px; color: var(--text-muted);">1. Clone repository and grant execution permissions:</p>
+          <div class="code-block-wrapper" style="margin-bottom: 20px;">
+            <div class="code-block-header">
+              <span>Bash Shell</span>
+              <button class="copy-btn" onclick="copyToClipboard('code-install-linux', this)">📋 Copy</button>
+            </div>
+            <pre><code id="code-install-linux">git clone https://github.com/mahirgul/whisper-audiosocket-stt-asterisk.git
+cd whisper-audiosocket-stt-asterisk
+chmod +x *.sh
+./install.sh</code></pre>
+          </div>
+
+          <p style="margin-bottom: 12px; color: var(--text-muted);">2. Start server daemon:</p>
+          <div class="code-block-wrapper">
+            <div class="code-block-header">
+              <span>Launch Command</span>
+              <button class="copy-btn" onclick="copyToClipboard('code-run-linux', this)">📋 Copy</button>
+            </div>
+            <pre><code id="code-run-linux">./run.sh</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Collaborative Engineering Section -->
+  <section id="credits" style="background: rgba(10, 15, 27, 0.5);">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">AI Collaboration</span>
+        <h2 class="section-title">Built Collaboratively by AI</h2>
+        <p class="section-desc">WASA was designed, refactored, and optimized through the combined capabilities of leading artificial intelligence models.</p>
+      </div>
+
+      <div class="collab-grid">
+        <div class="collab-card">
+          <div class="collab-avatar antigravity">AG</div>
+          <h3 style="color: #fff; margin-bottom: 8px;">Antigravity</h3>
+          <p style="font-size: 0.875rem; color: var(--text-muted);">Refactored process exit lifecycles (clean SIGINT without worker restarts), fixed multi-threading scope bugs, and designed statistical byte-swapping auto-detection.</p>
+        </div>
+
+        <div class="collab-card">
+          <div class="collab-avatar deepseek">DS</div>
+          <h3 style="color: #fff; margin-bottom: 8px;">DeepSeek</h3>
+          <p style="font-size: 0.875rem; color: var(--text-muted);">Assisted in code quality auditing, architectural refactoring, and logical separation of worker processes and API endpoints.</p>
+        </div>
+
+        <div class="collab-card">
+          <div class="collab-avatar gemini">GM</div>
+          <h3 style="color: #fff; margin-bottom: 8px;">Gemini</h3>
+          <p style="font-size: 0.875rem; color: var(--text-muted);">Developed initial Microsoft VibeVoice integration, VAD silence timeout controls, SSE streaming status, and UI localization.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container footer-container">
+      <div>
+        <p style="font-weight: 600; color: #fff;">WASA — Whisper AudioSocket Asterisk (v2.5.2)</p>
+        <p style="margin-top: 4px;">Developed by <a href="https://mhrgl.com" target="_blank" style="color: var(--cyan); text-decoration: none;">mhrgl.com</a> under MIT License.</p>
+      </div>
+
+      <div class="footer-links">
+        <a href="#simulator">Simulator</a>
+        <a href="#features">Features</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#dialplan">Dialplan</a>
+        <a href="https://github.com/mahirgul/whisper-audiosocket-stt-asterisk" target="_blank">GitHub</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Application Script -->
+  <script src="app.js"></script>
+</body>
+</html>

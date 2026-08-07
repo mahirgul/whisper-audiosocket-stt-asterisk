@@ -153,6 +153,16 @@ You can manage all settings via the **Config** tab in the Web UI. Key settings i
 
 ---
 
+## 🌐 GitHub Pages Website
+
+This repository includes a landing and documentation website located in the [`docs/`](docs/index.html) directory.
+
+To activate GitHub Pages on your repository:
+1. Navigate to repository **Settings** -> **Pages**.
+2. Select **Source** -> **GitHub Actions** (uses `.github/workflows/deploy-gh-pages.yml`) or select **Deploy from a branch** -> `main` / `/docs`.
+
+---
+
 ## 🤖 Collaborative AI Development (Antigravity, DeepSeek & Gemini)
 
 WASA is a collaborative project developed, optimized, and maintained through the joint efforts of **Antigravity**, **DeepSeek**, and **Gemini**:
